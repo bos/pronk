@@ -1,0 +1,40 @@
+name:                http-load-tester
+version:             0
+synopsis:            A small command line app for HTTP load testing
+description:
+  A small command line app for HTTP load testing.  You can think of it
+  as similar to `httperf` or `ab`, only it's more modern and simpler
+  to deal with.
+homepage:            https://github.com/mailrank/http-load-tester
+license:             BSD3
+license-file:        LICENSE
+author:              Bryan O'Sullivan <bos@mailrank.com>
+maintainer:          Bryan O'Sullivan <bos@mailrank.com>
+copyright:           2011 MailRank, Inc.
+category:            Network
+build-type:          Simple
+cabal-version:       >=1.8
+extra-source-files:  
+    README.markdown
+
+executable http-load-tester
+  hs-source-dirs: src
+  main-is:        LoadTester.hs
+
+  ghc-options: -threaded -rtsopts -Wall
+
+  build-depends:
+    base < 5,
+    bytestring,
+    cmdargs >= 0.7,
+    http-enumerator,
+    network,
+    time
+
+source-repository head
+  type:     git
+  location: git://github.com/mailrank/http-load-tester
+
+source-repository head
+  type:     mercurial
+  location: https://bitbucket.org/bos/http-load-tester

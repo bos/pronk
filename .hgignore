@@ -1,0 +1,11 @@
+.*\.(?:aux|h[ip]|o|orig|out|pdf|prof|ps|rej)$
+^(?:dist|\.DS_Store)$
+^benchmarks/(?:AesonParse|AesonEncode|JsonParse|.*_p)$
+^tests/(?:qc)
+
+syntax: glob
+cabal-dev
+*~
+.*.swp
+.\#*
+\#*
