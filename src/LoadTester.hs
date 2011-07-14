@@ -5,18 +5,25 @@ module Main (main) where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Concurrent.Chan (getChanContents, newChan, writeChan)
+import Control.Concurrent.Chan (Chan, getChanContents, newChan, writeChan)
 import Control.Exception (IOException, catch)
 import Control.Monad (forM_, unless, when)
+import Data.Function (on)
 import Data.Maybe (catMaybes)
-import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Network.HTTP.Enumerator
 import Network.Socket (withSocketsDo)
 import Prelude hiding (catch)
+import Statistics.Quantile (weightedAvg)
+import Statistics.Sample (mean, stdDev)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as I
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Unboxed as U
 import qualified System.Timeout as T
 
 data Args = Args {
@@ -32,7 +39,7 @@ defaultArgs = Args {
                 concurrency = 1
               , num_requests = 1
               , requests_per_second = def
-              , timeout = def
+              , timeout = 60
               , url = def &= argPos 0
               }
 
@@ -47,8 +54,12 @@ data Event =
 
 data Summary = Summary {
       summEvent :: Event
-    , summTime :: {-# UNPACK #-} !Double
+    , summElapsed :: {-# UNPACK #-} !Double
+    , summStart :: {-# UNPACK #-} !Double
     } deriving (Eq, Show)
+
+summEnd :: Summary -> Double
+summEnd Summary{..} = summStart + summElapsed
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -59,35 +70,43 @@ main = withSocketsDo $ do
                          (replicate leftover 1 ++ repeat 0)
         where (reqsPerThread,leftover) = num_requests `quotRem` concurrency
   let !interval | requests_per_second == 0 = 0
-                | otherwise = realToFrac (1 / requests_per_second)
+                | otherwise = realToFrac (fromIntegral concurrency /
+                                          requests_per_second)
   ch <- newChan
-  forM_ reqs $ \numReqs ->
-    forkIO . withManager $ \mgr -> do
-      let issueRequest = httpLbs req mgr
-          timedRequest
-            | timeout == 0 = respEvent <$> issueRequest
-            | otherwise    = do
-            maybeResp <- T.timeout (truncate (timeout * 1e6)) issueRequest
-            case maybeResp of
-              Just resp -> return (respEvent resp)
-              _         -> closeManager mgr >> return Timeout
-          loop !n now
-              | n == numReqs = return ()
-              | otherwise = do
-            !evt <- timedRequest `catch`
-                    \(_::IOException) -> closeManager mgr >> return NetworkError
-            now' <- getPOSIXTime
-            let elapsed = now' - now
-            writeChan ch Summary {
-                            summEvent = evt
-                          , summTime = realToFrac elapsed
-                          }
-            when (elapsed < interval) $
-              threadDelay . truncate $ (interval - elapsed) * 1000000
-            loop (n+1) =<< getPOSIXTime
-      loop 0 =<< getPOSIXTime
+  forM_ reqs $ \numReqs -> forkIO . withManager $ \mgr -> do
+    let as' = as {
+                num_requests = numReqs
+              }
+    client as' mgr req interval ch
   results <- take num_requests <$> getChanContents ch
-  forM_ results print
+  print $ analyze results
+
+client :: Args -> Manager -> Request IO -> POSIXTime -> Chan Summary -> IO ()
+client Args{..} mgr req interval ch = loop 0 =<< getPOSIXTime
+  where
+    loop !n now
+        | n == num_requests = return ()
+        | otherwise = do
+      !evt <- timedRequest `catch`
+              \(_::IOException) -> closeManager mgr >> return NetworkError
+      now' <- getPOSIXTime
+      let elapsed = now' - now
+      writeChan ch Summary {
+                      summEvent = evt
+                    , summElapsed = realToFrac elapsed
+                    , summStart = realToFrac now'
+                    }
+      when (elapsed < interval) $
+        threadDelay . truncate $ (interval - elapsed) * 1000000
+      loop (n+1) =<< getPOSIXTime
+    issueRequest = httpLbs req mgr
+    timedRequest
+      | timeout == 0 = respEvent <$> issueRequest
+      | otherwise    = do
+      maybeResp <- T.timeout (truncate (timeout * 1e6)) issueRequest
+      case maybeResp of
+        Just resp -> return (respEvent resp)
+        _         -> closeManager mgr >> return Timeout
 
 respEvent :: Response -> Event
 respEvent resp = HttpResponse {
@@ -108,3 +127,39 @@ validateArgs Args{..} = do
        ]
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
+
+data Analysis = Analysis {
+      latencyMean :: Double
+    , latencyStdDev :: Double
+    , latency99 :: Double
+    , latency999 :: Double
+    , throughputMean :: Double
+    , throughputStdDev :: Double
+    , throughput10 :: Double
+    } deriving (Show)
+
+analyze :: [Summary] -> Analysis
+analyze sums
+  = Analysis {
+      latencyMean = mean . G.map summElapsed $ sumv
+    , latencyStdDev = stdDev . G.map summElapsed $ sumv
+    , latency99 = weightedAvg 99 100 . G.map summElapsed $ sumv
+    , latency999 = weightedAvg 999 1000 . G.map summElapsed $ sumv
+    , throughputMean = (/ timeSlice) . mean $ slices
+    , throughputStdDev = (/ timeSlice) . stdDev $ slices
+    , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
+    }
+  where sumv = sortBy (compare `on` summStart) . V.fromList $ sums
+        start = summStart . G.head $ sumv
+        end = summEnd . G.last $ sumv
+        elapsed = end - start
+        timeSlice = min elapsed 1 / 200
+        slices = U.unfoldrN (round (elapsed / timeSlice)) go (sumv,1)
+          where go (v,i) = let (a,b) = G.span (\s -> summStart s <= t) v
+                               t = start + (i * timeSlice)
+                           in Just (fromIntegral $ G.length a,(b,i+1))
+
+-- | Sort a vector.
+sortBy :: (G.Vector v e) => I.Comparison e -> v e -> v e
+sortBy cmp = G.modify (I.sortBy cmp)
+{-# INLINE sortBy #-}

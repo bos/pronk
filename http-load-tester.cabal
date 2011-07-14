@@ -29,7 +29,10 @@ executable http-load-tester
     cmdargs >= 0.7,
     http-enumerator,
     network,
-    time
+    statistics,
+    time,
+    vector,
+    vector-algorithms
 
 source-repository head
   type:     git
