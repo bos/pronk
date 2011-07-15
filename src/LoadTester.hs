@@ -1,5 +1,5 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, RecordWildCards,
-    ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, OverloadedStrings,
+    RecordWildCards, ScopedTypeVariables #-}
 
 module Main (main) where
 
@@ -8,18 +8,23 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (Chan, getChanContents, newChan, writeChan)
 import Control.Exception (IOException, catch)
 import Control.Monad (forM_, unless, when)
+import Criterion.Analysis (SampleAnalysis(..), analyseSample, scale)
 import Data.Function (on)
 import Data.Maybe (catMaybes)
+import Data.Monoid
+import Data.Text.Buildable
+import Data.Text.Lazy.Builder
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Network.HTTP.Enumerator
 import Network.Socket (withSocketsDo)
 import Prelude hiding (catch)
 import Statistics.Quantile (weightedAvg)
-import Statistics.Sample (mean, stdDev)
+import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Text.Format as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as I
 import qualified Data.Vector.Generic as G
@@ -79,7 +84,8 @@ main = withSocketsDo $ do
               }
     client as' mgr req interval ch
   results <- take num_requests <$> getChanContents ch
-  print $ analyze results
+  putStrLn "analysing results"
+  report =<< analyse results
 
 client :: Args -> Manager -> Request IO -> POSIXTime -> Chan Summary -> IO ()
 client Args{..} mgr req interval ch = loop 0 =<< getPOSIXTime
@@ -129,35 +135,50 @@ validateArgs Args{..} = do
   unless (null problems) $ exitWith (ExitFailure 1)
 
 data Analysis = Analysis {
-      latencyMean :: Double
-    , latencyStdDev :: Double
+      latency :: SampleAnalysis
     , latency99 :: Double
     , latency999 :: Double
-    , throughputMean :: Double
-    , throughputStdDev :: Double
+    , throughput :: SampleAnalysis
     , throughput10 :: Double
     } deriving (Show)
 
-analyze :: [Summary] -> Analysis
-analyze sums
-  = Analysis {
-      latencyMean = mean . G.map summElapsed $ sumv
-    , latencyStdDev = stdDev . G.map summElapsed $ sumv
-    , latency99 = weightedAvg 99 100 . G.map summElapsed $ sumv
-    , latency999 = weightedAvg 999 1000 . G.map summElapsed $ sumv
-    , throughputMean = (/ timeSlice) . mean $ slices
-    , throughputStdDev = (/ timeSlice) . stdDev $ slices
-    , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
+analyse :: [Summary] -> IO Analysis
+analyse sums = do
+  let sumv = sortBy (compare `on` summStart) . V.fromList $ sums
+      start = summStart . G.head $ sumv
+      end = summEnd . G.last $ sumv
+      elapsed = end - start
+      timeSlice = min elapsed 1 / 200
+      slices = U.unfoldrN (round (elapsed / timeSlice)) go (sumv,1)
+        where go (v,i) = let (a,b) = G.span (\s -> summStart s <= t) v
+                             t = start + (i * timeSlice)
+                         in Just (fromIntegral $ G.length a,(b,i+1))
+      ci = 0.95
+      resamples = 10 * 1000
+  l <- analyseSample ci (G.convert . G.map summElapsed $ sumv) resamples
+  t <- analyseSample ci slices resamples
+  return Analysis {
+                 latency = l
+               , latency99 = weightedAvg 99 100 . G.map summElapsed $ sumv
+               , latency999 = weightedAvg 999 1000 . G.map summElapsed $ sumv
+               , throughput = scale (recip timeSlice) t
+               , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
     }
-  where sumv = sortBy (compare `on` summStart) . V.fromList $ sums
-        start = summStart . G.head $ sumv
-        end = summEnd . G.last $ sumv
-        elapsed = end - start
-        timeSlice = min elapsed 1 / 200
-        slices = U.unfoldrN (round (elapsed / timeSlice)) go (sumv,1)
-          where go (v,i) = let (a,b) = G.span (\s -> summStart s <= t) v
-                               t = start + (i * timeSlice)
-                           in Just (fromIntegral $ G.length a,(b,i+1))
+
+time :: Double -> Builder
+time t
+     | t < 1e-3  = build (t * 1e6) `mappend` " usec"
+     | t < 1     = build (t * 1e3) `mappend` " msec"
+     | otherwise = build t `mappend` " sec"
+
+report :: Analysis -> IO ()
+report Analysis{..} = do
+  T.print "latency:\n    mean:    {}\n    std dev: {}\n"
+    (time (estPoint (anMean latency)), time (estPoint (anStdDev latency)))
+  T.print "    99%:     {}\n    99.9%:   {}\n" (time latency99, time latency999)
+  T.print "\nthroughput:\n    mean:    {} req/sec\n    std dev: {} req/sec\n"
+    (estPoint (anMean throughput), estPoint (anStdDev throughput))
+  T.print "    10%:     {} req/sec\n" [throughput10]
 
 -- | Sort a vector.
 sortBy :: (G.Vector v e) => I.Comparison e -> v e -> v e
