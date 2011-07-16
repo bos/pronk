@@ -1,31 +1,41 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, OverloadedStrings,
     RecordWildCards, ScopedTypeVariables #-}
 
-module Main (main) where
+module Network.HTTP.LoadTest
+    (
+    -- * Running a load test
+      Config(..)
+    , defaultConfig
+    , run
+    -- * Results
+    , Event(..)
+    , Summary(..)
+    , summEnd
+    -- * Result analysis
+    , Analysis(..)
+    , analyse
+    , report
+    ) where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (newChan, readChan, writeChan)
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, replicateM, unless, when)
-import Criterion.Analysis
-    (OutlierEffect(..), OutlierVariance(..), SampleAnalysis(..),
-     analyseSample, scale)
+import Control.Monad (forM_, replicateM, when)
+import Criterion.Analysis (OutlierEffect(..), OutlierVariance(..),
+                           SampleAnalysis(..), analyseSample, scale)
+import Data.Data (Data)
 import Data.Function (on)
-import Data.Maybe (catMaybes)
-import Data.Monoid
+import Data.Monoid (mappend)
 import Data.Text (Text)
-import Data.Text.Buildable
-import Data.Text.Lazy.Builder
+import Data.Text.Buildable (build)
+import Data.Text.Lazy.Builder (Builder)
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
+import Data.Typeable (Typeable)
 import Network.HTTP.Enumerator
-import Network.Socket (withSocketsDo)
 import Prelude hiding (catch)
 import Statistics.Quantile (weightedAvg)
 import Statistics.Resampling.Bootstrap (Estimate(..))
-import System.Console.CmdArgs
-import System.Exit (ExitCode(ExitFailure), exitWith)
-import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.Format as T
 import qualified Data.Vector as V
@@ -34,21 +44,21 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
 import qualified System.Timeout as T
 
-data Args = Args {
+data Config = Config {
       concurrency :: Int
-    , num_requests :: Int
-    , requests_per_second :: Double
+    , numRequests :: Int
+    , requestsPerSecond :: Double
     , timeout :: Double
     , url :: String
-    } deriving (Eq, Show, Typeable, Data)
+    } deriving (Eq, Read, Show, Typeable, Data)
 
-defaultArgs :: Args
-defaultArgs = Args {
+defaultConfig :: Config
+defaultConfig = Config {
                 concurrency = 1
-              , num_requests = 1
-              , requests_per_second = def
+              , numRequests = 1
+              , requestsPerSecond = 0
               , timeout = 60
-              , url = def &= argPos 0
+              , url = ""
               }
 
 data Event =
@@ -58,44 +68,40 @@ data Event =
     } | NetworkError
       | Timeout
       | Done
-    deriving (Eq, Show)
+    deriving (Eq, Read, Show, Typeable, Data)
 
 data Summary = Summary {
       summEvent :: Event
     , summElapsed :: {-# UNPACK #-} !Double
     , summStart :: {-# UNPACK #-} !Double
-    } deriving (Eq, Show)
+    } deriving (Eq, Read, Show, Typeable, Data)
 
 summEnd :: Summary -> Double
 summEnd Summary{..} = summStart + summElapsed
 
-main :: IO ()
-main = withSocketsDo $ do
-  as@Args{..} <- cmdArgs defaultArgs
-  validateArgs as
+run :: Config -> IO (V.Vector Summary)
+run cfg@Config{..} = do
   req <- parseUrl url
   let reqs = zipWith (+) (replicate concurrency reqsPerThread)
                          (replicate leftover 1 ++ repeat 0)
-        where (reqsPerThread,leftover) = num_requests `quotRem` concurrency
-  let !interval | requests_per_second == 0 = 0
+        where (reqsPerThread,leftover) = numRequests `quotRem` concurrency
+  let !interval | requestsPerSecond == 0 = 0
                 | otherwise = realToFrac (fromIntegral concurrency /
-                                          requests_per_second)
+                                          requestsPerSecond)
   ch <- newChan
   forM_ reqs $ \numReqs -> forkIO . withManager $ \mgr -> do
-    let as' = as {
-                num_requests = numReqs
+    let cfg' = cfg {
+                numRequests = numReqs
               }
-    writeChan ch =<< client as' mgr req interval
-  results <- V.concat <$> replicateM concurrency (readChan ch)
-  putStrLn "analysing results"
-  report =<< analyse results
+    writeChan ch =<< client cfg' mgr req interval
+  V.concat <$> replicateM concurrency (readChan ch)
 
-client :: Args -> Manager -> Request IO -> POSIXTime
+client :: Config -> Manager -> Request IO -> POSIXTime
        -> IO (V.Vector Summary)
-client Args{..} mgr req interval = loop 0 [] =<< getPOSIXTime
+client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
   where
     loop !n acc now
-        | n == num_requests = return $! V.fromList (reverse acc)
+        | n == numRequests = return $! V.fromList (reverse acc)
         | otherwise = do
       !evt <- timedRequest `catch`
               \(_::IOException) -> closeManager mgr >> return NetworkError
@@ -124,27 +130,13 @@ respEvent resp = HttpResponse {
                  , respLength = fromIntegral . L.length . responseBody $ resp
                  }
 
-validateArgs :: Args -> IO ()
-validateArgs Args{..} = do
-  let p !? what | p         = Nothing
-                | otherwise = Just what
-      infix 1 !?
-      problems = catMaybes [
-         concurrency > 0 !? "--concurrency must be positive"
-       , num_requests > 0 !? "--num-requests must be positive"
-       , requests_per_second >= 0 !? "--requests-per-second cannot be negative"
-       , timeout >= 0 !? "--timeout cannot be negative"
-       ]
-  forM_ problems $ hPutStrLn stderr . ("Error: " ++)
-  unless (null problems) $ exitWith (ExitFailure 1)
-
 data Analysis = Analysis {
       latency :: SampleAnalysis
     , latency99 :: Double
     , latency999 :: Double
     , throughput :: SampleAnalysis
     , throughput10 :: Double
-    } deriving (Show)
+    } deriving (Eq, Show, Typeable, Data)
 
 analyse :: V.Vector Summary -> IO Analysis
 analyse sums = do
