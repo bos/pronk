@@ -8,10 +8,13 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (Chan, getChanContents, newChan, writeChan)
 import Control.Exception (IOException, catch)
 import Control.Monad (forM_, unless, when)
-import Criterion.Analysis (SampleAnalysis(..), analyseSample, scale)
+import Criterion.Analysis
+    (OutlierEffect(..), OutlierVariance(..), SampleAnalysis(..),
+     analyseSample, scale)
 import Data.Function (on)
 import Data.Maybe (catMaybes)
 import Data.Monoid
+import Data.Text (Text)
 import Data.Text.Buildable
 import Data.Text.Lazy.Builder
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
@@ -175,10 +178,24 @@ report :: Analysis -> IO ()
 report Analysis{..} = do
   T.print "latency:\n    mean:    {}\n    std dev: {}\n"
     (time (estPoint (anMean latency)), time (estPoint (anStdDev latency)))
+  effect (anOutliers latency)
   T.print "    99%:     {}\n    99.9%:   {}\n" (time latency99, time latency999)
   T.print "\nthroughput:\n    mean:    {} req/sec\n    std dev: {} req/sec\n"
     (estPoint (anMean throughput), estPoint (anStdDev throughput))
+  effect (anOutliers throughput)
   T.print "    10%:     {} req/sec\n" [throughput10]
+
+effect :: OutlierVariance -> IO ()
+effect OutlierVariance{..} =
+    case ovEffect of
+      Unaffected -> return ()
+      _ -> T.print "    estimates {} affected by outliers ({}%)\n"
+           (howMuch, T.fixed 1 (ovFraction * 100))
+    where howMuch = case ovEffect of
+                      Unaffected -> "not" :: Text
+                      Slight     -> "slightly"
+                      Moderate   -> "moderately"
+                      Severe     -> "severely"
 
 -- | Sort a vector.
 sortBy :: (G.Vector v e) => I.Comparison e -> v e -> v e
