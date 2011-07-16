@@ -5,9 +5,9 @@ module Main (main) where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Concurrent.Chan (Chan, getChanContents, newChan, writeChan)
+import Control.Concurrent.Chan (newChan, readChan, writeChan)
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM_, replicateM, unless, when)
 import Criterion.Analysis
     (OutlierEffect(..), OutlierVariance(..), SampleAnalysis(..),
      analyseSample, scale)
@@ -85,29 +85,30 @@ main = withSocketsDo $ do
     let as' = as {
                 num_requests = numReqs
               }
-    client as' mgr req interval ch
-  results <- take num_requests <$> getChanContents ch
+    writeChan ch =<< client as' mgr req interval
+  results <- V.concat <$> replicateM concurrency (readChan ch)
   putStrLn "analysing results"
   report =<< analyse results
 
-client :: Args -> Manager -> Request IO -> POSIXTime -> Chan Summary -> IO ()
-client Args{..} mgr req interval ch = loop 0 =<< getPOSIXTime
+client :: Args -> Manager -> Request IO -> POSIXTime
+       -> IO (V.Vector Summary)
+client Args{..} mgr req interval = loop 0 [] =<< getPOSIXTime
   where
-    loop !n now
-        | n == num_requests = return ()
+    loop !n acc now
+        | n == num_requests = return $! V.fromList (reverse acc)
         | otherwise = do
       !evt <- timedRequest `catch`
               \(_::IOException) -> closeManager mgr >> return NetworkError
       now' <- getPOSIXTime
       let elapsed = now' - now
-      writeChan ch Summary {
-                      summEvent = evt
-                    , summElapsed = realToFrac elapsed
-                    , summStart = realToFrac now'
-                    }
+          !s = Summary {
+                 summEvent = evt
+               , summElapsed = realToFrac elapsed
+               , summStart = realToFrac now'
+               }
       when (elapsed < interval) $
         threadDelay . truncate $ (interval - elapsed) * 1000000
-      loop (n+1) =<< getPOSIXTime
+      loop (n+1) (s:acc) =<< getPOSIXTime
     issueRequest = httpLbs req mgr
     timedRequest
       | timeout == 0 = respEvent <$> issueRequest
@@ -145,9 +146,9 @@ data Analysis = Analysis {
     , throughput10 :: Double
     } deriving (Show)
 
-analyse :: [Summary] -> IO Analysis
+analyse :: V.Vector Summary -> IO Analysis
 analyse sums = do
-  let sumv = sortBy (compare `on` summStart) . V.fromList $ sums
+  let sumv = sortBy (compare `on` summStart) sums
       start = summStart . G.head $ sumv
       end = summEnd . G.last $ sumv
       elapsed = end - start
