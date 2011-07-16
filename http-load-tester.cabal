@@ -18,12 +18,18 @@ cabal-version:       >=1.8
 extra-source-files:  
     README.markdown
 
+flag developer
+  description: operate in developer mode
+  default: False
+
 library
   hs-source-dirs: lib
   exposed-modules:
     Network.HTTP.LoadTest
 
   ghc-options: -Wall
+  if flag(developer)
+    ghc-prof-options: -auto-all
 
   build-depends:
     base < 5,
@@ -42,6 +48,8 @@ executable http-load-tester
   main-is:        App.hs
 
   ghc-options: -threaded -rtsopts -Wall
+  if flag(developer)
+    ghc-prof-options: -auto-all
 
   build-depends:
     base < 5,
