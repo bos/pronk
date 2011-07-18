@@ -6,6 +6,7 @@ module Main (main) where
 import Control.Monad (forM_, unless)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
+import Data.Aeson (encode)
 import Data.Maybe (catMaybes)
 import Data.Monoid (mappend)
 import Data.Text (Text)
@@ -17,11 +18,13 @@ import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr)
+import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.Format as T
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
       concurrency :: Int
+    , json :: Maybe FilePath
     , num_requests :: Int
     , requests_per_second :: Double
     , timeout :: Double
@@ -31,6 +34,7 @@ data Args = Args {
 defaultArgs :: Args
 defaultArgs = Args {
                 concurrency = 1
+              , json = def
               , num_requests = 1
               , requests_per_second = def
               , timeout = 60
@@ -60,7 +64,12 @@ main = withSocketsDo $ do
       exitWith (ExitFailure 1)
     Right results -> do
       whenNormal $ T.print "analysing results\n" ()
-      report =<< LoadTest.analyse results
+      analysis <- LoadTest.analyse results
+      case json of
+        Just "-" -> L.putStrLn (encode analysis)
+        Just f   -> L.writeFile f (encode analysis)
+        _        -> return ()
+      whenNormal $ report analysis
 
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do

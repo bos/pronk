@@ -1,17 +1,12 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, OverloadedStrings,
-    RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, RecordWildCards #-}
 
 module Network.HTTP.LoadTest
     (
     -- * Running a load test
-      Config(..)
-    , NetworkError(..)
+      NetworkError(..)
+    , Config(..)
     , defaultConfig
     , run
-    -- * Results
-    , Event(..)
-    , Summary(..)
-    , summEnd
     -- * Result analysis
     , Analysis(..)
     , analyse
@@ -20,16 +15,15 @@ module Network.HTTP.LoadTest
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (newChan, readChan, writeChan)
-import Control.Exception (Exception, IOException, catch, throwIO, try)
+import Control.Exception (catch, throwIO, try)
 import Control.Monad (forM_, replicateM, when)
-import Criterion.Analysis (SampleAnalysis(..), analyseSample, scale)
-import Data.Data (Data)
+import Criterion.Analysis (analyseSample, scale)
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.List (nub)
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
-import Data.Typeable (Typeable)
 import Network.HTTP.Enumerator
+import Network.HTTP.LoadTest.Types
 import Prelude hiding (catch)
 import Statistics.Quantile (weightedAvg)
 import qualified Data.ByteString.Lazy as L
@@ -38,47 +32,6 @@ import qualified Data.Vector.Algorithms.Intro as I
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
 import qualified System.Timeout as T
-
-data Config = Config {
-      concurrency :: Int
-    , numRequests :: Int
-    , requestsPerSecond :: Double
-    , timeout :: Double
-    , url :: String
-    } deriving (Eq, Read, Show, Typeable, Data)
-
-defaultConfig :: Config
-defaultConfig = Config {
-                concurrency = 1
-              , numRequests = 1
-              , requestsPerSecond = 0
-              , timeout = 60
-              , url = ""
-              }
-
-data Event =
-    HttpResponse {
-      respCode :: {-# UNPACK #-} !Int
-    , respLength :: {-# UNPACK #-} !Int
-    } | Timeout
-      | Done
-    deriving (Eq, Read, Show, Typeable, Data)
-
--- | Exception thrown if issuing a HTTP request fails.
-data NetworkError = NetworkError {
-      fromNetworkError :: IOException
-    } deriving (Eq, Show, Typeable)
-
-instance Exception NetworkError
-
-data Summary = Summary {
-      summEvent :: Event
-    , summElapsed :: {-# UNPACK #-} !Double
-    , summStart :: {-# UNPACK #-} !Double
-    } deriving (Eq, Read, Show, Typeable, Data)
-
-summEnd :: Summary -> Double
-summEnd Summary{..} = summStart + summElapsed
 
 run :: Config -> IO (Either [NetworkError] (V.Vector Summary))
 run cfg@Config{..} = do
@@ -128,18 +81,11 @@ client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
         _         -> closeManager mgr >> return Timeout
 
 respEvent :: Response -> Event
-respEvent resp = HttpResponse {
-                   respCode = statusCode resp
-                 , respLength = fromIntegral . L.length . responseBody $ resp
-                 }
-
-data Analysis = Analysis {
-      latency :: SampleAnalysis
-    , latency99 :: Double
-    , latency999 :: Double
-    , throughput :: SampleAnalysis
-    , throughput10 :: Double
-    } deriving (Eq, Show, Typeable, Data)
+respEvent resp =
+    HttpResponse {
+      respCode = statusCode resp
+    , respContentLength = fromIntegral . L.length . responseBody $ resp
+    }
 
 analyse :: V.Vector Summary -> IO Analysis
 analyse sums = do

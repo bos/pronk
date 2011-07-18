@@ -28,12 +28,14 @@ library
   hs-source-dirs: lib
   exposed-modules:
     Network.HTTP.LoadTest
+    Network.HTTP.LoadTest.Types
 
   ghc-options: -Wall
   if flag(developer)
     ghc-prof-options: -auto-all
 
   build-depends:
+    aeson,
     base < 5,
     bytestring,
     criterion >= 0.5.1.0,
@@ -52,7 +54,9 @@ executable http-load-tester
     ghc-prof-options: -auto-all
 
   build-depends:
+    aeson,
     base < 5,
+    bytestring,
     cmdargs >= 0.7,
     criterion,
     http-load-tester,
