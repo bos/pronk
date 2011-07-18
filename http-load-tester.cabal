@@ -39,8 +39,6 @@ library
     criterion >= 0.5.1.0,
     http-enumerator,
     statistics,
-    text,
-    text-format,
     time,
     vector,
     vector-algorithms
@@ -56,8 +54,11 @@ executable http-load-tester
   build-depends:
     base < 5,
     cmdargs >= 0.7,
+    criterion,
     http-load-tester,
     network,
+    statistics,
+    text,
     text-format
 
 source-repository head

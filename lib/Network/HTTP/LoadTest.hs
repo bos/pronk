@@ -5,6 +5,7 @@ module Network.HTTP.LoadTest
     (
     -- * Running a load test
       Config(..)
+    , NetworkError(..)
     , defaultConfig
     , run
     -- * Results
@@ -14,30 +15,24 @@ module Network.HTTP.LoadTest
     -- * Result analysis
     , Analysis(..)
     , analyse
-    , report
     ) where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (newChan, readChan, writeChan)
-import Control.Exception (IOException, catch)
+import Control.Exception (Exception, IOException, catch, throwIO, try)
 import Control.Monad (forM_, replicateM, when)
-import Criterion.Analysis (OutlierEffect(..), OutlierVariance(..),
-                           SampleAnalysis(..), analyseSample, scale)
+import Criterion.Analysis (SampleAnalysis(..), analyseSample, scale)
 import Data.Data (Data)
+import Data.Either (partitionEithers)
 import Data.Function (on)
-import Data.Monoid (mappend)
-import Data.Text (Text)
-import Data.Text.Buildable (build)
-import Data.Text.Lazy.Builder (Builder)
+import Data.List (nub)
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Data.Typeable (Typeable)
 import Network.HTTP.Enumerator
 import Prelude hiding (catch)
 import Statistics.Quantile (weightedAvg)
-import Statistics.Resampling.Bootstrap (Estimate(..))
 import qualified Data.ByteString.Lazy as L
-import qualified Data.Text.Format as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as I
 import qualified Data.Vector.Generic as G
@@ -65,10 +60,16 @@ data Event =
     HttpResponse {
       respCode :: {-# UNPACK #-} !Int
     , respLength :: {-# UNPACK #-} !Int
-    } | NetworkError
-      | Timeout
+    } | Timeout
       | Done
     deriving (Eq, Read, Show, Typeable, Data)
+
+-- | Exception thrown if issuing a HTTP request fails.
+data NetworkError = NetworkError {
+      fromNetworkError :: IOException
+    } deriving (Eq, Show, Typeable)
+
+instance Exception NetworkError
 
 data Summary = Summary {
       summEvent :: Event
@@ -79,7 +80,7 @@ data Summary = Summary {
 summEnd :: Summary -> Double
 summEnd Summary{..} = summStart + summElapsed
 
-run :: Config -> IO (V.Vector Summary)
+run :: Config -> IO (Either [NetworkError] (V.Vector Summary))
 run cfg@Config{..} = do
   req <- parseUrl url
   let reqs = zipWith (+) (replicate concurrency reqsPerThread)
@@ -93,8 +94,11 @@ run cfg@Config{..} = do
     let cfg' = cfg {
                 numRequests = numReqs
               }
-    writeChan ch =<< client cfg' mgr req interval
-  V.concat <$> replicateM concurrency (readChan ch)
+    writeChan ch =<< try (client cfg' mgr req interval)
+  (errs,vs) <- partitionEithers <$> replicateM concurrency (readChan ch)
+  return $ case errs of
+             [] -> Right (V.concat vs)
+             _  -> Left (nub errs)
 
 client :: Config -> Manager -> Request IO -> POSIXTime
        -> IO (V.Vector Summary)
@@ -103,8 +107,7 @@ client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
     loop !n acc now
         | n == numRequests = return $! V.fromList (reverse acc)
         | otherwise = do
-      !evt <- timedRequest `catch`
-              \(_::IOException) -> closeManager mgr >> return NetworkError
+      !evt <- timedRequest
       now' <- getPOSIXTime
       let elapsed = now' - now
           !s = Summary {
@@ -115,7 +118,7 @@ client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
       when (elapsed < interval) $
         threadDelay . truncate $ (interval - elapsed) * 1000000
       loop (n+1) (s:acc) =<< getPOSIXTime
-    issueRequest = httpLbs req mgr
+    issueRequest = httpLbs req mgr `catch` (throwIO . NetworkError)
     timedRequest
       | timeout == 0 = respEvent <$> issueRequest
       | otherwise    = do
@@ -160,35 +163,6 @@ analyse sums = do
                , throughput = scale (recip timeSlice) t
                , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
     }
-
-time :: Double -> Builder
-time t
-     | t < 1e-3  = build (t * 1e6) `mappend` " usec"
-     | t < 1     = build (t * 1e3) `mappend` " msec"
-     | otherwise = build t `mappend` " sec"
-
-report :: Analysis -> IO ()
-report Analysis{..} = do
-  T.print "latency:\n    mean:    {}\n    std dev: {}\n"
-    (time (estPoint (anMean latency)), time (estPoint (anStdDev latency)))
-  effect (anOutliers latency)
-  T.print "    99%:     {}\n    99.9%:   {}\n" (time latency99, time latency999)
-  T.print "\nthroughput:\n    mean:    {} req/sec\n    std dev: {} req/sec\n"
-    (estPoint (anMean throughput), estPoint (anStdDev throughput))
-  effect (anOutliers throughput)
-  T.print "    10%:     {} req/sec\n" [throughput10]
-
-effect :: OutlierVariance -> IO ()
-effect OutlierVariance{..} =
-    case ovEffect of
-      Unaffected -> return ()
-      _ -> T.print "    estimates {} affected by outliers ({}%)\n"
-           (howMuch, T.fixed 1 (ovFraction * 100))
-    where howMuch = case ovEffect of
-                      Unaffected -> "not" :: Text
-                      Slight     -> "slightly"
-                      Moderate   -> "moderately"
-                      Severe     -> "severely"
 
 -- | Sort a vector.
 sortBy :: (G.Vector v e) => I.Comparison e -> v e -> v e
