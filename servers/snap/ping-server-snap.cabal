@@ -3,7 +3,7 @@ Version:             0
 Build-type:          Simple
 Cabal-version:       >=1.2
 
-Executable snap
+Executable ping-server-snap
   hs-source-dirs: src
   main-is: Main.hs
 
