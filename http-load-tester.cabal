@@ -17,8 +17,8 @@ build-type:          Simple
 cabal-version:       >=1.8
 extra-source-files:  
     README.markdown
-    servers/snap/ping-server-snap.cabal
-    servers/snap/src/*.hs
+    servers/ping/ping-servers.cabal
+    servers/ping/src/*.hs
 
 flag developer
   description: operate in developer mode
