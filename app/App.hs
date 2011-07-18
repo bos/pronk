@@ -3,6 +3,7 @@
 
 module Main (main) where
 
+import Control.Applicative ((<$>))
 import Control.Monad (forM_, unless)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
@@ -12,7 +13,7 @@ import Data.Monoid (mappend)
 import Data.Text (Text)
 import Data.Text.Buildable (build)
 import Data.Text.Lazy.Builder (Builder)
-import Network.HTTP.LoadTest (Analysis(..), NetworkError(..))
+import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..))
 import Network.Socket (withSocketsDo)
 import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.Console.CmdArgs
@@ -23,7 +24,8 @@ import qualified Data.Text.Format as T
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
-      concurrency :: Int
+      bootstrap :: Bool
+    , concurrency :: Int
     , json :: Maybe FilePath
     , num_requests :: Int
     , requests_per_second :: Double
@@ -33,7 +35,8 @@ data Args = Args {
 
 defaultArgs :: Args
 defaultArgs = Args {
-                concurrency = 1
+                bootstrap = def
+              , concurrency = 1
               , json = def
               , num_requests = 1
               , requests_per_second = def
@@ -64,12 +67,14 @@ main = withSocketsDo $ do
       exitWith (ExitFailure 1)
     Right results -> do
       whenNormal $ T.print "analysing results\n" ()
-      analysis <- LoadTest.analyse results
+      analysis <- if bootstrap
+                  then Right <$> LoadTest.analyseFull results
+                  else return . Left . LoadTest.analyseBasic $ results
       case json of
         Just "-" -> L.putStrLn (encode analysis)
         Just f   -> L.writeFile f (encode analysis)
         _        -> return ()
-      whenNormal $ report analysis
+      whenNormal $ either reportBasic reportFull analysis
 
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do
@@ -85,8 +90,20 @@ validateArgs Args{..} = do
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
 
-report :: Analysis -> IO ()
-report Analysis{..} = do
+reportBasic :: Analysis Basic -> IO ()
+reportBasic Analysis{..} = do
+  T.print "latency:\n" ()
+  T.print "    mean:    {}\n" [time (mean latency)]
+  T.print "    std dev: {}\n" [time (stdDev latency)]
+  T.print "    99%:     {}\n    99.9%:   {}\n" (time latency99, time latency999)
+  T.print "\nthroughput:\n" ()
+  T.print "    mean:    {} req/sec\n" [mean throughput]
+  T.print "    std dev: {} req/sec\n" [stdDev throughput]
+  T.print "    10%:     {} req/sec\n" [throughput10]
+
+
+reportFull :: Analysis SampleAnalysis -> IO ()
+reportFull Analysis{..} = do
   T.print "latency:\n" ()
   T.print "    mean:    {}\n" [time (estPoint (anMean latency))]
   whenLoud $ do
