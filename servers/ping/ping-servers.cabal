@@ -5,13 +5,25 @@ Cabal-version:       >=1.2
 
 Executable ping-server-snap
   hs-source-dirs: src
-  main-is: Main.hs
+  main-is: Snap.hs
 
   Build-depends:
     base >= 4 && < 5,
-    bytestring >= 0.9.1 && < 0.10,
     snap == 0.5.*,
     snap-core == 0.5.*,
     snap-server == 0.5.*
+
+  ghc-options: -rtsopts -threaded -Wall
+
+Executable ping-server-warp
+  hs-source-dirs: src
+  main-is: Warp.hs
+
+  Build-depends:
+    base >= 4 && < 5,
+    blaze-builder >= 0.3.0.1,
+    http-types >= 0.6.5.1,
+    wai >= 0.4.1,
+    warp >= 0.4.2
 
   ghc-options: -rtsopts -threaded -Wall
