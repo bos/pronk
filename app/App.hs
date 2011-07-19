@@ -11,10 +11,11 @@ import Data.Aeson ((.=), encode, object)
 import Data.Maybe (catMaybes)
 import Data.Monoid (mappend)
 import Data.Text (Text, pack)
-import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Buildable (build)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Lazy.Builder (Builder)
-import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..), Req(..))
+import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..),
+                              Req(..))
 import Network.Socket (withSocketsDo)
 import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.Console.CmdArgs
