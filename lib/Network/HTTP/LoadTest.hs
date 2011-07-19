@@ -5,6 +5,7 @@ module Network.HTTP.LoadTest
     -- * Running a load test
       NetworkError(..)
     , Config(..)
+    , Req(..)
     , defaultConfig
     , run
     -- * Result analysis
@@ -28,17 +29,16 @@ import Network.HTTP.Enumerator
 import Network.HTTP.LoadTest.Types
 import Prelude hiding (catch)
 import Statistics.Quantile (weightedAvg)
-import qualified Statistics.Sample as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as I
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
+import qualified Statistics.Sample as S
 import qualified System.Timeout as T
 
 run :: Config -> IO (Either [NetworkError] (V.Vector Summary))
 run cfg@Config{..} = do
-  req <- parseUrl url
   let reqs = zipWith (+) (replicate concurrency reqsPerThread)
                          (replicate leftover 1 ++ repeat 0)
         where (reqsPerThread,leftover) = numRequests `quotRem` concurrency
@@ -47,18 +47,16 @@ run cfg@Config{..} = do
                                           requestsPerSecond)
   ch <- newChan
   forM_ reqs $ \numReqs -> forkIO . withManager $ \mgr -> do
-    let cfg' = cfg {
-                numRequests = numReqs
-              }
-    writeChan ch =<< try (client cfg' mgr req interval)
+    let cfg' = cfg { numRequests = numReqs }
+    writeChan ch =<< try (client cfg' mgr interval)
   (errs,vs) <- partitionEithers <$> replicateM concurrency (readChan ch)
   return $ case errs of
              [] -> Right (V.concat vs)
              _  -> Left (nub errs)
 
-client :: Config -> Manager -> Request IO -> POSIXTime
+client :: Config -> Manager -> POSIXTime
        -> IO (V.Vector Summary)
-client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
+client Config{..} mgr interval = loop 0 [] =<< getPOSIXTime
   where
     loop !n acc now
         | n == numRequests = return $! V.fromList (reverse acc)
@@ -74,7 +72,8 @@ client Config{..} mgr req interval = loop 0 [] =<< getPOSIXTime
       when (elapsed < interval) $
         threadDelay . truncate $ (interval - elapsed) * 1000000
       loop (n+1) (s:acc) =<< getPOSIXTime
-    issueRequest = httpLbs req mgr `catch` (throwIO . NetworkError)
+    issueRequest = httpLbs (fromReq request) mgr
+                   `catch` (throwIO . NetworkError)
     timedRequest
       | timeout == 0 = respEvent <$> issueRequest
       | otherwise    = do

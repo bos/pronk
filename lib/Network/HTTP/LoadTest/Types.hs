@@ -1,9 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards,
+    ScopedTypeVariables #-}
 
 module Network.HTTP.LoadTest.Types
     (
     -- * Running a load test
       Config(..)
+    , Req(..)
     , defaultConfig
     , NetworkError(..)
     -- * Results
@@ -16,18 +18,61 @@ module Network.HTTP.LoadTest.Types
     ) where
 
 import Control.Applicative ((<$>), (<*>), empty)
-import Control.Exception (Exception, IOException)
+import Control.Arrow (first)
+import Control.Exception (Exception, IOException, SomeException, try)
+import Data.Aeson.Types (Value(..), FromJSON(..), ToJSON(..), (.:), (.=), object)
 import Data.Data (Data)
-import Data.Aeson.Types (Value(Object), FromJSON(..), ToJSON(..), (.:), (.=), object)
 import Data.Typeable (Typeable)
+import Network.HTTP.Enumerator (Request(..), parseUrl)
+import Network.HTTP.Types (renderQuery)
+import System.IO.Unsafe
+import qualified Data.ByteString.Char8 as B
+import qualified Data.CaseInsensitive as CI
+import qualified Data.Text as T
+
+newtype Req = Req {
+      fromReq :: Request IO
+    } deriving (Typeable)
+
+instance Show Req where
+    show (Req Request{..}) = concat [http, B.unpack host, portie, B.unpack path,
+                                     B.unpack (renderQuery True queryString)]
+        where http | secure = "https://"
+                   | otherwise = "http://"
+              isDefaultPort | secure    = port == 443
+                            | otherwise = port == 80
+              portie | isDefaultPort = ""
+                     | otherwise     = ":" ++ show port
+
+instance ToJSON Req where
+    toJSON req@(Req Request{..}) = toJSON [
+                                     "url" .= show req
+                                   , "method" .= method
+                                   , "headers" .= map (first CI.original)
+                                                  requestHeaders
+                                   ]
+
+instance FromJSON Req where
+    parseJSON (Object v) = do
+      (u,m,h) <- (,,) <$> (v .: "url") <*> (v .: "method") <*> (v .: "headers")
+      req <- unsafePerformIO $ do
+               t <- try $ parseUrl (T.unpack u)
+               return $ case t of
+                          Left (_::SomeException) -> empty
+                          Right r -> return r
+      return . Req $ req {
+                        method = m
+                      , requestHeaders = map (first CI.mk) h
+                      }
+    parseJSON _ = empty
 
 data Config = Config {
       concurrency :: Int
     , numRequests :: Int
     , requestsPerSecond :: Double
     , timeout :: Double
-    , url :: String
-    } deriving (Eq, Read, Show, Typeable, Data)
+    , request :: Req
+    } deriving (Show, Typeable)
 
 instance ToJSON Config where
     toJSON Config{..} = object [
@@ -35,7 +80,7 @@ instance ToJSON Config where
                         , "numRequests" .= numRequests
                         , "requestsPerSecond" .= requestsPerSecond
                         , "timeout" .= timeout
-                        , "url" .= url
+                        , "request" .= request
                         ]
 
 instance FromJSON Config where
@@ -44,8 +89,12 @@ instance FromJSON Config where
                            v .: "numRequests" <*>
                            v .: "requestsPerSecond" <*>
                            v .: "timeout" <*>
-                           v .: "url"
+                           v .: "request"
     parseJSON _ = empty
+
+emptyReq :: Req
+emptyReq = Req . unsafePerformIO $ parseUrl "http://127.0.0.1/"
+{-# NOINLINE emptyReq #-}
 
 defaultConfig :: Config
 defaultConfig = Config {
@@ -53,7 +102,7 @@ defaultConfig = Config {
               , numRequests = 1
               , requestsPerSecond = 0
               , timeout = 60
-              , url = ""
+              , request = emptyReq
               }
 
 data Event =

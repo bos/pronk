@@ -7,57 +7,76 @@ import Control.Applicative ((<$>))
 import Control.Monad (forM_, unless)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
-import Data.Aeson (encode)
+import Data.Aeson ((.=), encode, object)
 import Data.Maybe (catMaybes)
 import Data.Monoid (mappend)
 import Data.Text (Text)
 import Data.Text.Buildable (build)
 import Data.Text.Lazy.Builder (Builder)
-import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..))
+import Network.HTTP.Enumerator as E (Request(..), parseUrl)
+import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..), Req(..))
 import Network.Socket (withSocketsDo)
 import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr)
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.Format as T
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
-      bootstrap :: Bool
-    , concurrency :: Int
-    , json :: Maybe FilePath
+      concurrency :: Int
+    , method :: String
     , num_requests :: Int
     , requests_per_second :: Double
     , timeout :: Double
     , url :: String
+
+    , bootstrap :: Bool
+    , json :: Maybe FilePath
     } deriving (Eq, Show, Typeable, Data)
 
 defaultArgs :: Args
 defaultArgs = Args {
-                bootstrap = def
-              , concurrency = 1
-              , json = def
+                concurrency = 1
+                &= groupname "Load testing"
+                &= help "Number of requests to issue concurrently"
+              , method = "GET" &= typ "METHOD"
+                &= help "HTTP method to use (GET, POST, ...)"
               , num_requests = 1
+                &= help "Total number of requests to issue"
               , requests_per_second = def
-              , timeout = 60
+                &= help "Maximum request rate to sustain"
+              , timeout = 60 &= typ "SECS"
+                &= help "Time to wait before killing a connection"
               , url = def &= argPos 0
+
+              , bootstrap = def
+                &= groupname "Analysis of results"
+                &= help "Statistically robust analysis of results"
+              , json = def &= typ "FILE"
+                &= help "Save analysis in JSON format"
               } &= verbosity
 
-fromArgs :: Args -> LoadTest.Config
-fromArgs Args{..} = LoadTest.Config {
-                      LoadTest.concurrency = concurrency
-                    , LoadTest.numRequests = num_requests
-                    , LoadTest.requestsPerSecond = requests_per_second
-                    , LoadTest.timeout = timeout
-                    , LoadTest.url = url
-                    }
+fromArgs :: Args -> Request IO -> LoadTest.Config
+fromArgs Args{..} req =
+    LoadTest.Config {
+      LoadTest.concurrency = concurrency
+    , LoadTest.numRequests = num_requests
+    , LoadTest.requestsPerSecond = requests_per_second
+    , LoadTest.timeout = timeout
+    , LoadTest.request = Req req
+    }
 
 main :: IO ()
 main = withSocketsDo $ do
-  as@Args{..} <- cmdArgs defaultArgs
+  as@Args{..} <- cmdArgs $ defaultArgs &= program "http-load-tester"
   validateArgs as
-  run <- LoadTest.run (fromArgs as)
+  req0 <- parseUrl url
+  let req = req0 { E.method = B.pack method }
+      cfg = fromArgs as req
+  run <- LoadTest.run cfg
   case run of
     Left [NetworkError err] ->
       T.hprint stderr "Error: {}" [show err] >> exitWith (ExitFailure 1)
@@ -70,9 +89,10 @@ main = withSocketsDo $ do
       analysis <- if bootstrap
                   then Right <$> LoadTest.analyseFull results
                   else return . Left . LoadTest.analyseBasic $ results
+      let dump = object [ "config" .= cfg, "analysis" .= analysis ]
       case json of
-        Just "-" -> L.putStrLn (encode analysis)
-        Just f   -> L.writeFile f (encode analysis)
+        Just "-" -> L.putStrLn (encode dump)
+        Just f   -> L.writeFile f (encode dump)
         _        -> return ()
       whenNormal $ either reportBasic reportFull analysis
 
