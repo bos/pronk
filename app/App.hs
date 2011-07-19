@@ -10,10 +10,10 @@ import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
 import Data.Aeson ((.=), encode, object)
 import Data.Maybe (catMaybes)
 import Data.Monoid (mappend)
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Buildable (build)
 import Data.Text.Lazy.Builder (Builder)
-import Network.HTTP.Enumerator as E (Request(..), parseUrl)
 import Network.HTTP.LoadTest (Analysis(..), Basic(..), NetworkError(..), Req(..))
 import Network.Socket (withSocketsDo)
 import Statistics.Resampling.Bootstrap (Estimate(..))
@@ -23,15 +23,19 @@ import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.Format as T
+import qualified Network.HTTP.Enumerator as E
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
       concurrency :: Int
-    , method :: String
+    , method :: Maybe String
     , num_requests :: Int
     , requests_per_second :: Double
     , timeout :: Double
     , url :: String
+
+    , from_file :: Maybe FilePath
+    , literal :: Maybe String
 
     , bootstrap :: Bool
     , json :: Maybe FilePath
@@ -42,7 +46,7 @@ defaultArgs = Args {
                 concurrency = 1
                 &= groupname "Load testing"
                 &= help "Number of requests to issue concurrently"
-              , method = "GET" &= typ "METHOD"
+              , method = def &= typ "METHOD"
                 &= help "HTTP method to use (GET, POST, ...)"
               , num_requests = 1
                 &= help "Total number of requests to issue"
@@ -52,6 +56,12 @@ defaultArgs = Args {
                 &= help "Time to wait before killing a connection"
               , url = def &= argPos 0
 
+              , from_file = def &= typ "FILE"
+                &= groupname "Supplying a request body"
+                &= help "Use file contents as request body"
+              , literal = def &= typ "STRING"
+                &= help "Use given text as request body"
+
               , bootstrap = def
                 &= groupname "Analysis of results"
                 &= help "Statistically robust analysis of results"
@@ -59,7 +69,7 @@ defaultArgs = Args {
                 &= help "Save analysis in JSON format"
               } &= verbosity
 
-fromArgs :: Args -> Request IO -> LoadTest.Config
+fromArgs :: Args -> E.Request IO -> LoadTest.Config
 fromArgs Args{..} req =
     LoadTest.Config {
       LoadTest.concurrency = concurrency
@@ -73,9 +83,7 @@ main :: IO ()
 main = withSocketsDo $ do
   as@Args{..} <- cmdArgs $ defaultArgs &= program "http-load-tester"
   validateArgs as
-  req0 <- parseUrl url
-  let req = req0 { E.method = B.pack method }
-      cfg = fromArgs as req
+  cfg <- fromArgs as <$> createRequest as
   run <- LoadTest.run cfg
   case run of
     Left [NetworkError err] ->
@@ -109,6 +117,31 @@ validateArgs Args{..} = do
        ]
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
+
+createRequest :: Args -> IO (E.Request IO)
+createRequest Args{..} = do
+  req0 <- E.parseUrl url
+  let check Nothing = return "POST"
+      check (Just "POST") = return "POST"
+      check (Just "PUT")  = return "PUT"
+      check _      = do
+        hPutStrLn stderr "Error: only POST or PUT may have a body"
+        exitWith (ExitFailure 1)
+  case (from_file, literal) of
+    (Nothing,Nothing) -> return req0 { E.method = maybe "GET" B.pack method }
+    (Just f,Nothing) -> do
+      s <- B.readFile f
+      meth <- check method
+      return req0 { E.method = meth
+                  , E.requestBody = E.RequestBodyBS s }
+    (Nothing,Just s) -> do
+      meth <- check method
+      return req0 { E.method = meth
+                  , E.requestBody = E.RequestBodyBS . encodeUtf8 . pack $ s
+                  }
+    _ -> do
+      hPutStrLn stderr "Error: --literal and --from-file are mutually exclusive"
+      exitWith (ExitFailure 1)
 
 reportBasic :: Analysis Basic -> IO ()
 reportBasic Analysis{..} = do
