@@ -1,12 +1,15 @@
-name:                http-load-tester
+name:                pronk
 version:             0.1.0.0
-synopsis:            A small command line app for HTTP load testing
+synopsis:            A library and command line app for HTTP load testing
 description:
   A library and command line tool for HTTP load testing.  You can
   think of this package as similar to `httperf` or `ab`, only more
   modern, faster, more scalable, easier to deal with, and
   programmable.
-homepage:            https://github.com/mailrank/http-load-tester
+  .
+  The name "pronk" comes from the Afrikaans verb /pronk-/, meaning
+  "to show off" or "to strut".
+homepage:            https://github.com/mailrank/pronk
 license:             BSD3
 license-file:        LICENSE
 author:              Bryan O'Sullivan <bos@mailrank.com>
@@ -48,11 +51,12 @@ library
     vector,
     vector-algorithms
 
-executable http-load-tester
+executable pronk
   hs-source-dirs: app
-  main-is:        App.hs
+  main-is: App.hs
 
   ghc-options: -threaded -rtsopts -Wall
+
   if flag(developer)
     ghc-prof-options: -auto-all
 
@@ -63,7 +67,7 @@ executable http-load-tester
     cmdargs >= 0.7,
     criterion,
     http-enumerator,
-    http-load-tester,
+    pronk,
     network,
     statistics,
     text,
@@ -71,8 +75,8 @@ executable http-load-tester
 
 source-repository head
   type:     git
-  location: git://github.com/mailrank/http-load-tester
+  location: git://github.com/mailrank/pronk
 
 source-repository head
   type:     mercurial
-  location: https://bitbucket.org/bos/http-load-tester
+  location: https://bitbucket.org/bos/pronk

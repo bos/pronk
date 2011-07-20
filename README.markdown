@@ -1,8 +1,9 @@
-# Welcome to http-load-tester
+# Welcome to pronk
 
-`http-load-tester` is a small command line application for load
-testing web servers.  You can think of it as similar to `httperf` or
-`ab`, only it's more modern and simpler to deal with.
+`pronk` consists of a library and a command line application for load
+testing web servers.  You can think of the command line tool as
+similar to `httperf` or `ab`, only more modern and simpler to deal
+with.
 
 # Join in!
 
@@ -10,15 +11,15 @@ We are happy to receive bug reports, fixes, documentation enhancements,
 and other improvements.
 
 Please report bugs via the
-[github issue tracker](http://github.com/mailrank/http-load-tester/issues).
+[github issue tracker](http://github.com/mailrank/pronk/issues).
 
-Master [git repository](http://github.com/mailrank/http-load-tester):
+Master [git repository](http://github.com/mailrank/pronk):
 
-* `git clone git://github.com/mailrank/http-load-tester.git`
+* `git clone git://github.com/mailrank/pronk.git`
 
-There's also a [Mercurial mirror](http://bitbucket.org/bos/http-load-tester):
+There's also a [Mercurial mirror](http://bitbucket.org/bos/pronk):
 
-* `hg clone http://bitbucket.org/bos/http-load-tester`
+* `hg clone http://bitbucket.org/bos/pronk`
 
 (You can create and contribute changes using either git or Mercurial.)
 
