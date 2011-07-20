@@ -54,6 +54,7 @@ library
 executable pronk
   hs-source-dirs: app
   main-is: App.hs
+  c-sources: app/cbits/rtsopts.c
 
   ghc-options: -threaded -rtsopts -Wall
 
