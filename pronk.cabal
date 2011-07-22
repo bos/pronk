@@ -31,6 +31,7 @@ library
   hs-source-dirs: lib
   exposed-modules:
     Network.HTTP.LoadTest
+    Network.HTTP.LoadTest.Report
     Network.HTTP.LoadTest.Types
 
   ghc-options: -Wall
@@ -47,6 +48,7 @@ library
     http-types,
     statistics,
     text,
+    text-format,
     time,
     vector,
     vector-algorithms
@@ -70,7 +72,6 @@ executable pronk
     http-enumerator,
     pronk,
     network,
-    statistics,
     text,
     text-format
 
