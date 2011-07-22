@@ -2,8 +2,8 @@
 
 `pronk` consists of a library and a command line application for load
 testing web servers.  You can think of the command line tool as
-similar to `httperf` or `ab`, only more modern and simpler to deal
-with.
+similar to `httperf` or `ab` (also known as apachebench), only more
+modern and simpler to deal with.
 
 # Join in!
 
