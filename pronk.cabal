@@ -44,12 +44,14 @@ library
     bytestring,
     case-insensitive,
     criterion >= 0.5.1.0,
+    hashable >= 1.1.2.0,
     http-enumerator,
     http-types,
     statistics,
     text,
     text-format,
     time,
+    unordered-containers >= 0.1.4.0,
     vector,
     vector-algorithms
 

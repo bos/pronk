@@ -21,7 +21,9 @@ import Control.Applicative ((<$>), (<*>), empty)
 import Control.Arrow (first)
 import Control.Exception (Exception, IOException, SomeException, try)
 import Data.Aeson.Types (Value(..), FromJSON(..), ToJSON(..), (.:), (.=), object)
+import Data.Bits (xor)
 import Data.Data (Data)
+import Data.Hashable (Hashable(hash))
 import Data.Typeable (Typeable)
 import Network.HTTP.Enumerator (Request(..), parseUrl)
 import Network.HTTP.Types (renderQuery)
@@ -110,7 +112,11 @@ data Event =
       respCode :: {-# UNPACK #-} !Int
     , respContentLength :: {-# UNPACK #-} !Int
     } | Timeout
-    deriving (Eq, Read, Show, Typeable, Data)
+    deriving (Eq, Ord, Read, Show, Typeable, Data)
+
+instance Hashable Event where
+    hash Timeout = 0
+    hash HttpResponse{..} = respCode `xor` respContentLength
 
 -- | Exception thrown if issuing a HTTP request fails.
 data NetworkError = NetworkError {
@@ -120,10 +126,10 @@ data NetworkError = NetworkError {
 instance Exception NetworkError
 
 data Summary = Summary {
-      summEvent :: Event
+      summStart :: {-# UNPACK #-} !Double
     , summElapsed :: {-# UNPACK #-} !Double
-    , summStart :: {-# UNPACK #-} !Double
-    } deriving (Eq, Read, Show, Typeable, Data)
+    , summEvent :: Event
+    } deriving (Eq, Ord, Read, Show, Typeable, Data)
 
 summEnd :: Summary -> Double
 summEnd Summary{..} = summStart + summElapsed

@@ -3,20 +3,27 @@
 module Network.HTTP.LoadTest.Report
     (
       reportBasic
+    , reportEvents
     , reportFull
     ) where
 
+import Control.Monad (forM_)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
+import Data.List (sort)
 import Data.Monoid (mappend)
 import Data.Text (Text)
 import Data.Text.Buildable (build)
 import Data.Text.Lazy.Builder (Builder)
-import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..))
+import Data.Vector (Vector)
+import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
+                                    Summary(..))
 import Prelude hiding (print)
 import Statistics.Resampling.Bootstrap (Estimate(..))
 import System.IO (Handle)
+import qualified Data.HashMap.Strict as H
 import qualified Data.Text.Format as T
+import qualified Data.Vector.Generic as G
 
 reportBasic :: Handle -> Analysis Basic -> IO ()
 reportBasic h Analysis{..} = do
@@ -73,3 +80,16 @@ effect h OutlierVariance{..} =
                       Slight     -> "slightly"
                       Moderate   -> "moderately"
                       Severe     -> "severely"
+
+reportEvents :: Handle -> Vector Summary -> IO ()
+reportEvents h sumv = do
+  let evtMap = G.foldl' go H.empty . G.map summEvent $ sumv
+      go m e = H.insertWith (+) (classify e) (1::Int) m
+      classify Timeout          = 0
+      classify HttpResponse{..} = respCode
+  T.hprint h "responses:\n" ()
+  forM_ (sort . H.toList $ evtMap) $ \(e,n) -> do
+    let nameOf 0 = "timeout "
+        nameOf k = "HTTP " `mappend` build k
+    T.hprint h "    {} {}\n" (nameOf e, T.left 6 ' ' n)
+  T.hprint h "\n" ()

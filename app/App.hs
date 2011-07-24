@@ -10,7 +10,7 @@ import Data.Maybe (catMaybes)
 import Data.Text (pack)
 import Data.Text.Encoding (encodeUtf8)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
-import Network.HTTP.LoadTest.Report (reportBasic, reportFull)
+import Network.HTTP.LoadTest.Report (reportBasic, reportEvents, reportFull)
 import Network.Socket (withSocketsDo)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
@@ -97,8 +97,10 @@ main = withSocketsDo $ do
         Just "-" -> L.putStrLn (encode dump)
         Just f   -> L.writeFile f (encode dump)
         _        -> return ()
-      whenNormal $ either (reportBasic stdout) (reportFull whenLoud stdout)
-                   analysis
+      whenNormal $ do
+        reportEvents stdout results
+        either (reportBasic stdout) (reportFull whenLoud stdout)
+               analysis
 
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do
