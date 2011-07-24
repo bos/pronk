@@ -23,6 +23,8 @@ import Network.HTTP.LoadTest.Types
 import Prelude hiding (catch)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as I
+import qualified Data.Vector.Generic as G
 import qualified System.Timeout as T
 
 run :: Config -> IO (Either [NetworkError] (V.Vector Summary))
@@ -39,7 +41,7 @@ run cfg@Config{..} = do
     writeChan ch =<< try (client cfg' mgr interval)
   (errs,vs) <- partitionEithers <$> replicateM concurrency (readChan ch)
   return $ case errs of
-             [] -> Right (V.concat vs)
+             [] -> Right . G.modify I.sort . V.concat $ vs
              _  -> Left (nub errs)
 
 client :: Config -> Manager -> POSIXTime
@@ -47,7 +49,7 @@ client :: Config -> Manager -> POSIXTime
 client Config{..} mgr interval = loop 0 [] =<< getPOSIXTime
   where
     loop !n acc now
-        | n == numRequests = return $! V.fromList (reverse acc)
+        | n == numRequests = return (V.fromList acc)
         | otherwise = do
       !evt <- timedRequest
       now' <- getPOSIXTime

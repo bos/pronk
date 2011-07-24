@@ -11,20 +11,22 @@ import Data.Aeson ((.=), encode, object)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Lazy.Builder (toLazyText)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
 import Network.HTTP.LoadTest.Analysis (analyseBasic, analyseFull)
 import Network.HTTP.LoadTest.Environment (environment)
-import Network.HTTP.LoadTest.Report (buildTime, reportBasic, reportEvents,
-                                     reportFull)
+import Network.HTTP.LoadTest.Report (buildTime, csvEvents, reportBasic,
+                                     reportEvents, reportFull)
 import Network.Socket (withSocketsDo)
 import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr, stdout)
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Format as T
+import qualified Data.Text.Lazy.IO as TL
 import qualified Network.HTTP.Enumerator as E
 import qualified Network.HTTP.LoadTest as LoadTest
 
@@ -40,6 +42,7 @@ data Args = Args {
     , literal :: Maybe String
 
     , bootstrap :: Bool
+    , dump_events :: Maybe FilePath
     , json :: Maybe FilePath
     } deriving (Eq, Show, Typeable, Data)
 
@@ -67,6 +70,8 @@ defaultArgs = Args {
               , bootstrap = def
                 &= groupname "Analysis of results"
                 &= help "Statistically robust analysis of results"
+              , dump_events = def &= typ "FILE"
+                &= help "Save raw events in CSV format"
               , json = def &= typ "FILE"
                 &= help "Save analysis in JSON format"
               } &= verbosity
@@ -107,8 +112,12 @@ main = withSocketsDo $ do
                         , "environment" .= env
                         , "analysis" .= analysis ]
       case json of
-        Just "-" -> L.putStrLn (encode dump)
-        Just f   -> L.writeFile f (encode dump)
+        Just "-" -> BL.putStrLn (encode dump)
+        Just f   -> BL.writeFile f (encode dump)
+        _        -> return ()
+      case dump_events of
+        Just "-" -> TL.putStr . toLazyText . csvEvents $ results
+        Just f   -> TL.writeFile f . toLazyText . csvEvents $ results
         _        -> return ()
       whenNormal $ do
         reportEvents stdout results

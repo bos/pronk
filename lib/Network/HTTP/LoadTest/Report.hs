@@ -5,6 +5,8 @@ module Network.HTTP.LoadTest.Report
       reportBasic
     , reportEvents
     , reportFull
+    -- * Other reports
+    , csvEvents
     -- * Helper functions
     , buildTime
     ) where
@@ -13,10 +15,10 @@ import Control.Monad (forM_)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
 import Data.List (sort)
-import Data.Monoid (mappend)
+import Data.Monoid (mappend, mconcat, mempty)
 import Data.Text (Text)
 import Data.Text.Buildable (build)
-import Data.Text.Format (prec)
+import Data.Text.Format (prec, shortest)
 import Data.Text.Lazy.Builder (Builder)
 import Data.Vector (Vector)
 import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
@@ -99,3 +101,18 @@ reportEvents h sumv = do
         nameOf k = "HTTP " `mappend` build k
     T.hprint h "    {} {}\n" (nameOf e, T.left 7 ' ' n)
   T.hprint h "\n" ()
+
+csvEvents :: Vector Summary -> Builder
+csvEvents sums = "start,elapsed,event\n" `mappend` G.foldr go mempty sums
+  where
+    firstStart = summStart (G.head sums)
+    go Summary{..} b = mconcat [
+                         shortest $ summStart - firstStart
+                       , ","
+                       , shortest summElapsed
+                       , ","
+                       , classify summEvent
+                       , "\n"
+                       ] `mappend` b
+    classify Timeout          = "timeout"
+    classify HttpResponse{..} = build respCode

@@ -52,7 +52,7 @@ library
     http-types,
     statistics,
     text,
-    text-format,
+    text-format >= 0.3.0.4,
     time,
     unix-compat >= 0.2.2,
     unordered-containers >= 0.1.4.0,
