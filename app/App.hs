@@ -10,6 +10,7 @@ import Data.Maybe (catMaybes)
 import Data.Text (pack)
 import Data.Text.Encoding (encodeUtf8)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
+import Network.HTTP.LoadTest.Analysis (analyseBasic, analyseFull)
 import Network.HTTP.LoadTest.Report (reportBasic, reportEvents, reportFull)
 import Network.Socket (withSocketsDo)
 import System.Console.CmdArgs
@@ -90,8 +91,8 @@ main = withSocketsDo $ do
     Right results -> do
       whenNormal $ T.print "analysing results\n" ()
       analysis <- if bootstrap
-                  then Right <$> LoadTest.analyseFull results
-                  else return . Left . LoadTest.analyseBasic $ results
+                  then Right <$> analyseFull results
+                  else return . Left . analyseBasic $ results
       let dump = object [ "config" .= cfg, "analysis" .= analysis ]
       case json of
         Just "-" -> L.putStrLn (encode dump)
