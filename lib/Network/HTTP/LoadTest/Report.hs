@@ -5,6 +5,8 @@ module Network.HTTP.LoadTest.Report
       reportBasic
     , reportEvents
     , reportFull
+    -- * Helper functions
+    , buildTime
     ) where
 
 import Control.Monad (forM_)
@@ -14,6 +16,7 @@ import Data.List (sort)
 import Data.Monoid (mappend)
 import Data.Text (Text)
 import Data.Text.Buildable (build)
+import Data.Text.Format (prec)
 import Data.Text.Lazy.Builder (Builder)
 import Data.Vector (Vector)
 import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
@@ -64,10 +67,13 @@ reportFull whenLoud h Analysis{..} = do
   print "    10%:     {} req/sec\n" [throughput10]
 
 time :: Double -> Builder
-time t
-     | t < 1e-3  = build (t * 1e6) `mappend` " usec"
-     | t < 1     = build (t * 1e3) `mappend` " msec"
-     | otherwise = build t `mappend` " sec"
+time = buildTime 6
+
+buildTime :: Int -> Double -> Builder
+buildTime precision t
+     | t < 1e-3  = prec precision (t * 1e6) `mappend` " usec"
+     | t < 1     = prec precision (t * 1e3) `mappend` " msec"
+     | otherwise = prec precision t `mappend` " sec"
 
 effect :: Handle -> OutlierVariance -> IO ()
 effect h OutlierVariance{..} =
@@ -91,5 +97,5 @@ reportEvents h sumv = do
   forM_ (sort . H.toList $ evtMap) $ \(e,n) -> do
     let nameOf 0 = "timeout "
         nameOf k = "HTTP " `mappend` build k
-    T.hprint h "    {} {}\n" (nameOf e, T.left 6 ' ' n)
+    T.hprint h "    {} {}\n" (nameOf e, T.left 7 ' ' n)
   T.hprint h "\n" ()

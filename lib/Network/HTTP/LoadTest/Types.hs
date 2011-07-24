@@ -19,6 +19,7 @@ module Network.HTTP.LoadTest.Types
 
 import Control.Applicative ((<$>), (<*>), empty)
 import Control.Arrow (first)
+import Control.DeepSeq (NFData(rnf))
 import Control.Exception (Exception, IOException, SomeException, try)
 import Data.Aeson.Types (Value(..), FromJSON(..), ToJSON(..), (.:), (.=), object)
 import Data.Bits (xor)
@@ -142,10 +143,15 @@ data Analysis a = Analysis {
     , throughput10 :: !Double
     } deriving (Eq, Show, Typeable, Data)
 
+instance (NFData a) => NFData (Analysis a) where
+    rnf Analysis{..} = rnf latency `seq` rnf throughput
+
 data Basic = Basic {
-      mean :: !Double
-    , stdDev :: !Double
+      mean :: {-# UNPACK #-} !Double
+    , stdDev :: {-# UNPACK #-} !Double
     } deriving (Eq, Show, Typeable, Data)
+
+instance NFData Basic
 
 instance ToJSON Basic where
     toJSON Basic{..} = object [

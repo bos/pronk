@@ -4,15 +4,21 @@
 module Main (main) where
 
 import Control.Applicative ((<$>))
+import Control.DeepSeq (rnf)
+import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless)
 import Data.Aeson ((.=), encode, object)
 import Data.Maybe (catMaybes)
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
 import Network.HTTP.LoadTest.Analysis (analyseBasic, analyseFull)
-import Network.HTTP.LoadTest.Report (reportBasic, reportEvents, reportFull)
+import Network.HTTP.LoadTest.Environment (environment)
+import Network.HTTP.LoadTest.Report (buildTime, reportBasic, reportEvents,
+                                     reportFull)
 import Network.Socket (withSocketsDo)
+import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr, stdout)
@@ -77,10 +83,10 @@ fromArgs Args{..} req =
 
 main :: IO ()
 main = withSocketsDo $ do
-  as@Args{..} <- cmdArgs $ defaultArgs &= program "http-load-tester"
+  as@Args{..} <- cmdArgs $ defaultArgs &= program "pronk"
   validateArgs as
   cfg <- fromArgs as <$> createRequest as
-  run <- LoadTest.run cfg
+  run <- timed "tested" $ LoadTest.run cfg
   case run of
     Left [NetworkError err] ->
       T.hprint stderr "Error: {}\n" [show err] >> exitWith (ExitFailure 1)
@@ -90,10 +96,16 @@ main = withSocketsDo $ do
       exitWith (ExitFailure 1)
     Right results -> do
       whenNormal $ T.print "analysing results\n" ()
-      analysis <- if bootstrap
-                  then Right <$> analyseFull results
-                  else return . Left . analyseBasic $ results
-      let dump = object [ "config" .= cfg, "analysis" .= analysis ]
+      analysis <- timed "analysed" $ do
+                    r <- if bootstrap
+                         then Right <$> analyseFull results
+                         else return . Left . analyseBasic $ results
+                    evaluate $ rnf r
+                    return r
+      env <- environment
+      let dump = object [ "config" .= cfg
+                        , "environment" .= env
+                        , "analysis" .= analysis ]
       case json of
         Just "-" -> L.putStrLn (encode dump)
         Just f   -> L.writeFile f (encode dump)
@@ -141,3 +153,23 @@ createRequest Args{..} = do
     _ -> do
       hPutStrLn stderr "Error: --literal and --from-file are mutually exclusive"
       exitWith (ExitFailure 1)
+
+timed :: Text -> IO a -> IO a
+timed desc act = do
+  startCPU <- getCPUTime
+  startWall <- getPOSIXTime
+  act `finally` do
+    endCPU <- getCPUTime
+    endWall <- getPOSIXTime
+    let elapsedCPU  = fromIntegral (endCPU - startCPU) / 1e12
+        elapsedWall = realToFrac $ endWall - startWall
+        ratio = elapsedCPU / elapsedWall
+    whenNormal $
+      -- Try to work around the 64-bit Mac getCPUTime bug
+      -- http://hackage.haskell.org/trac/ghc/ticket/4970
+      if ratio > 0 && ratio < 32
+      then T.print "{} in {} ({}% CPU)\n"
+               (desc, buildTime 4 elapsedWall,
+                T.fixed 1 $ 100 * elapsedCPU / elapsedWall)
+      else T.print "{} in {}\n"
+               (desc, buildTime 4 elapsedWall)

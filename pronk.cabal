@@ -32,6 +32,7 @@ library
   exposed-modules:
     Network.HTTP.LoadTest
     Network.HTTP.LoadTest.Analysis
+    Network.HTTP.LoadTest.Environment
     Network.HTTP.LoadTest.Report
     Network.HTTP.LoadTest.Types
 
@@ -45,6 +46,7 @@ library
     bytestring,
     case-insensitive,
     criterion >= 0.5.1.0,
+    deepseq,
     hashable >= 1.1.2.0,
     http-enumerator,
     http-types,
@@ -52,6 +54,7 @@ library
     text,
     text-format,
     time,
+    unix-compat >= 0.2.2,
     unordered-containers >= 0.1.4.0,
     vector,
     vector-algorithms
@@ -72,11 +75,13 @@ executable pronk
     bytestring,
     cmdargs >= 0.7,
     criterion,
+    deepseq,
     http-enumerator,
     pronk,
     network,
     text,
-    text-format
+    text-format,
+    time
 
 source-repository head
   type:     git
