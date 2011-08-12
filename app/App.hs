@@ -24,7 +24,7 @@ import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr, stdout)
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.Text.Format as T
 import qualified Data.Text.Lazy.IO as TL
 import qualified Network.HTTP.Enumerator as E
