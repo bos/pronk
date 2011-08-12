@@ -10,7 +10,6 @@ module Network.HTTP.LoadTest.Analysis
     ) where
 
 import Criterion.Analysis (SampleAnalysis, analyseSample, scale)
-import Data.Function (on)
 import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Summary(..),
                                     summEnd)
 import Prelude hiding (catch)
