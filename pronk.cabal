@@ -48,7 +48,7 @@ library
     criterion >= 0.5.1.0,
     deepseq,
     hashable >= 1.1.2.0,
-    http-enumerator,
+    http-enumerator >= 0.7,
     http-types,
     statistics,
     text,

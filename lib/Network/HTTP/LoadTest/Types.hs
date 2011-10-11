@@ -38,22 +38,22 @@ newtype Req = Req {
     } deriving (Typeable)
 
 instance Show Req where
-    show (Req Request{..}) = concat [http, B.unpack host, portie, B.unpack path,
-                                     B.unpack (renderQuery True queryString)]
-        where http | secure = "https://"
-                   | otherwise = "http://"
-              isDefaultPort | secure    = port == 443
-                            | otherwise = port == 80
+    show (Req req) = concatMap B.unpack
+                         [ http, host req, portie, path req
+                         , renderQuery True $ queryString req ]
+        where http | secure req = "https://"
+                   | otherwise  = "http://"
+              isDefaultPort | secure req = port req == 443
+                            | otherwise  = port req == 80
               portie | isDefaultPort = ""
-                     | otherwise     = ":" ++ show port
+                     | otherwise     = B.pack $ ":" ++ show (port req)
 
 instance ToJSON Req where
-    toJSON req@(Req Request{..}) = toJSON [
-                                     "url" .= show req
-                                   , "method" .= method
-                                   , "headers" .= map (first CI.original)
-                                                  requestHeaders
+    toJSON req@(Req req') = toJSON [ "url"     .= show req
+                                   , "method"  .= method req'
+                                   , "headers" .= headers req'
                                    ]
+        where headers = map (first CI.original) . requestHeaders
 
 instance FromJSON Req where
     parseJSON (Object v) = do
