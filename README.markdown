@@ -11,11 +11,11 @@ We are happy to receive bug reports, fixes, documentation enhancements,
 and other improvements.
 
 Please report bugs via the
-[github issue tracker](http://github.com/mailrank/pronk/issues).
+[github issue tracker](http://github.com/bos/pronk/issues).
 
-Master [git repository](http://github.com/mailrank/pronk):
+Master [git repository](http://github.com/bos/pronk):
 
-* `git clone git://github.com/mailrank/pronk.git`
+* `git clone git://github.com/bos/pronk.git`
 
 There's also a [Mercurial mirror](http://bitbucket.org/bos/pronk):
 
@@ -27,4 +27,4 @@ Authors
 -------
 
 This application is written and maintained by Bryan O'Sullivan,
-<bos@mailrank.com>.
+<bos@serpentine.com>.
