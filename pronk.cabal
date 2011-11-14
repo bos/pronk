@@ -9,11 +9,11 @@ description:
   .
   The name "pronk" comes from the Afrikaans verb /pronk-/, meaning
   "to show off" or "to strut".
-homepage:            https://github.com/mailrank/pronk
+homepage:            https://github.com/bos/pronk
 license:             BSD3
 license-file:        LICENSE
-author:              Bryan O'Sullivan <bos@mailrank.com>
-maintainer:          Bryan O'Sullivan <bos@mailrank.com>
+author:              Bryan O'Sullivan <bos@serpentine.com>
+maintainer:          Bryan O'Sullivan <bos@serpentine.com>
 copyright:           2011 MailRank, Inc.
 category:            Network
 build-type:          Simple
@@ -85,7 +85,7 @@ executable pronk
 
 source-repository head
   type:     git
-  location: git://github.com/mailrank/pronk
+  location: git://github.com/bos/pronk
 
 source-repository head
   type:     mercurial
