@@ -59,17 +59,20 @@ reportFull whenLoud h Analysis{..} = do
   print "\nthroughput:\n" ()
   print "    mean:    {} req/sec\n" [estPoint (anMean throughput)]
   whenLoud $ do
-    print "      lower: {} req/sec\n" [estLowerBound (anMean throughput)]
-    print "      upper: {} req/sec\n" [estUpperBound (anMean throughput)]
-  print "    std dev: {} req/sec\n" [estPoint (anStdDev throughput)]
+    print "      lower: {}\n" [rate (estLowerBound (anMean throughput))]
+    print "      upper: {}\n" [rate (estUpperBound (anMean throughput))]
+  print "    std dev: {}\n" [rate (estPoint (anStdDev throughput))]
   whenLoud $ do
-    print "      lower: {} req/sec\n" [estLowerBound (anStdDev throughput)]
-    print "      upper: {} req/sec\n" [estUpperBound (anStdDev throughput)]
+    print "      lower: {}\n" [rate (estLowerBound (anStdDev throughput))]
+    print "      upper: {}\n" [rate (estUpperBound (anStdDev throughput))]
   effect h (anOutlierVar throughput)
-  print "    10%:     {} req/sec\n" [throughput10]
+  print "    10%:     {}\n" [rate throughput10]
 
 time :: Double -> Builder
-time = buildTime 6
+time = buildTime 4
+
+rate :: Double -> Builder
+rate r = prec 4 r `mappend` " req/sec"
 
 buildTime :: Int -> Double -> Builder
 buildTime precision t
