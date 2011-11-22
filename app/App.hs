@@ -1,13 +1,14 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, OverloadedStrings,
-    RecordWildCards #-}
+{-# LANGUAGE BangPatterns, CPP, DeriveDataTypeable, OverloadedStrings,
+    RecordWildCards, ScopedTypeVariables #-}
 
 module Main (main) where
 
 import Control.Applicative ((<$>))
 import Control.DeepSeq (rnf)
-import Control.Exception (evaluate, finally)
+import Control.Exception (catch, evaluate, finally)
 import Control.Monad (forM_, unless)
 import Data.Aeson ((.=), encode, object)
+import Data.Char (toLower)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
@@ -19,6 +20,7 @@ import Network.HTTP.LoadTest.Environment (environment)
 import Network.HTTP.LoadTest.Report (buildTime, csvEvents, reportBasic,
                                      reportEvents, reportFull)
 import Network.Socket (withSocketsDo)
+import Prelude hiding (catch)
 import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
@@ -60,7 +62,7 @@ defaultArgs = Args {
                 &= help "Maximum request rate to sustain"
               , timeout = 60 &= typ "SECS"
                 &= help "Time to wait before killing a connection"
-              , url = def &= argPos 0
+              , url = def &= argPos 0 &= typ "URL"
 
               , from_file = def &= typ "FILE"
                 &= groupname "Supplying a request body"
@@ -76,6 +78,8 @@ defaultArgs = Args {
               , json = def &= typ "FILE"
                 &= help "Save analysis in JSON format"
               } &= verbosity
+                &= summary ("Pronk " ++ VERSION_pronk ++
+                            " - a modern HTTP load tester")
 
 fromArgs :: Args -> E.Request IO -> LoadTest.Config
 fromArgs Args{..} req =
@@ -94,8 +98,7 @@ main = withSocketsDo $ do
   cfg <- fromArgs as <$> createRequest as
   run <- timed "tested" $ LoadTest.run cfg
   case run of
-    Left [NetworkError err] ->
-      T.hprint stderr "Error: {}\n" [show err] >> exitWith (ExitFailure 1)
+    Left [NetworkError err] -> fatal (show err)
     Left errs -> do
       T.hprint stderr "Errors:\n" ()
       forM_ errs $ \(NetworkError err) -> T.hprint stderr "  {}\n" [show err]
@@ -128,7 +131,7 @@ main = withSocketsDo $ do
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do
   let p !? what | p         = Nothing
-                | otherwise = Just what
+                | otherwise = Just $ "Argument to " ++ what
       infix 1 !?
       problems = catMaybes [
          concurrency > 0 !? "--concurrency must be positive"
@@ -141,13 +144,15 @@ validateArgs Args{..} = do
 
 createRequest :: Args -> IO (E.Request IO)
 createRequest Args{..} = do
-  req0 <- E.parseUrl url
+  req0 <- E.parseUrl url `catch` \(e::E.HttpException) ->
+          fatal $ "could not parse URL - " ++
+                case e of
+                  E.InvalidUrlException _ s -> map toLower s
+                  _ -> show e
   let check Nothing       = return "POST"
       check (Just "POST") = return "POST"
       check (Just "PUT")  = return "PUT"
-      check _      = do
-        hPutStrLn stderr "Error: only POST or PUT may have a body"
-        exitWith (ExitFailure 1)
+      check _      = fatal "only POST or PUT may have a body"
   case (from_file, literal) of
     (Nothing,Nothing) -> return req0 { E.method = maybe "GET" B.pack method }
     (Just f,Nothing) -> do
@@ -183,3 +188,8 @@ timed desc act = do
                 T.fixed 1 $ 100 * elapsedCPU / elapsedWall)
       else T.print "{} in {}\n"
                (desc, buildTime 4 elapsedWall)
+
+fatal :: String -> IO a
+fatal e = do
+  T.hprint stderr "Error: {}\n" (T.Only e)
+  exitWith (ExitFailure 1)
