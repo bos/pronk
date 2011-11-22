@@ -54,7 +54,7 @@ reportFull whenLoud h Analysis{..} = do
   whenLoud $ do
     print "      lower: {}\n" [time (estLowerBound (anStdDev latency))]
     print "      upper: {}\n" [time (estUpperBound (anStdDev latency))]
-  effect h (anOutliers latency)
+  effect h (anOutlierVar latency)
   print "    99%:     {}\n    99.9%:   {}\n" (time latency99, time latency999)
   print "\nthroughput:\n" ()
   print "    mean:    {} req/sec\n" [estPoint (anMean throughput)]
@@ -65,7 +65,7 @@ reportFull whenLoud h Analysis{..} = do
   whenLoud $ do
     print "      lower: {} req/sec\n" [estLowerBound (anStdDev throughput)]
     print "      upper: {} req/sec\n" [estUpperBound (anStdDev throughput)]
-  effect h (anOutliers throughput)
+  effect h (anOutlierVar throughput)
   print "    10%:     {} req/sec\n" [throughput10]
 
 time :: Double -> Builder
