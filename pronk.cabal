@@ -1,5 +1,5 @@
 name:                pronk
-version:             0.1.0.0
+version:             0.1.0
 synopsis:            A library and command line app for HTTP load testing
 description:
   A library and command line tool for HTTP load testing.  You can
