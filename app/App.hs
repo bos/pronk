@@ -23,6 +23,7 @@ import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr, stdout)
+import qualified Data.Aeson.Generic as G
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.Text.Format as T
@@ -110,7 +111,7 @@ main = withSocketsDo $ do
       env <- environment
       let dump = object [ "config" .= cfg
                         , "environment" .= env
-                        , "analysis" .= analysis ]
+                        , "analysis" .= G.toJSON analysis ]
       case json of
         Just "-" -> BL.putStrLn (encode dump)
         Just f   -> BL.writeFile f (encode dump)
