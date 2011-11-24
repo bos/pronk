@@ -35,6 +35,8 @@ library
     Network.HTTP.LoadTest.Environment
     Network.HTTP.LoadTest.Report
     Network.HTTP.LoadTest.Types
+  other-modules:
+    Paths_pronk
 
   ghc-options: -Wall
   if flag(developer)
@@ -47,7 +49,9 @@ library
     case-insensitive,
     criterion >= 0.6.0.0,
     deepseq,
+    filepath,
     hashable >= 1.1.2.0,
+    hastache,
     http-enumerator >= 0.7,
     http-types,
     statistics >= 0.10.0.0,

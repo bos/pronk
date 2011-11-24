@@ -5,6 +5,7 @@ module Network.HTTP.LoadTest.Report
       reportBasic
     , reportEvents
     , reportFull
+    , writeReportBasic
     -- * Other reports
     , csvEvents
     -- * Helper functions
@@ -23,12 +24,18 @@ import Data.Text.Lazy.Builder (Builder)
 import Data.Vector (Vector)
 import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
                                     Summary(..))
+import Paths_pronk (getDataFileName)
 import Prelude hiding (print)
 import Statistics.Resampling.Bootstrap (Estimate(..))
+import System.FilePath ((</>))
 import System.IO (Handle)
+import Text.Hastache (MuType(..))
+import Text.Hastache.Context (mkGenericContext)
+import qualified Data.ByteString.Lazy as L
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text.Format as T
 import qualified Data.Vector.Generic as G
+import qualified Text.Hastache as H
 
 reportBasic :: Handle -> Analysis Basic -> IO ()
 reportBasic h Analysis{..} = do
@@ -119,3 +126,14 @@ csvEvents sums = "start,elapsed,event\n" `mappend` G.foldr go mempty sums
                        ] `mappend` b
     classify Timeout          = "timeout"
     classify HttpResponse{..} = build respCode
+
+templateDir :: FilePath
+templateDir = "templates"
+
+writeReportBasic :: Handle -> Analysis Basic -> IO ()
+writeReportBasic h Analysis{..} = do
+  tpl <- getDataFileName templateDir
+  let context n@"latency" = mkGenericContext latency n
+      context _           = MuNothing
+  bs <- H.hastacheFile H.defaultConfig (tpl </> "report.tpl") context
+  L.hPutStr h bs
