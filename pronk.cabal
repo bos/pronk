@@ -4,8 +4,8 @@ synopsis:            A library and command line app for HTTP load testing
 description:
   A library and command line tool for HTTP load testing.  You can
   think of this package as similar to `httperf` or `ab`, only more
-  modern, faster, more scalable, easier to deal with, and
-  programmable.
+  modern, faster, more scalable, easier to deal with, programmable,
+  and with customisable output.
   .
   The name "pronk" comes from the Afrikaans verb /pronk-/, meaning
   "to show off" or "to strut".
@@ -14,7 +14,8 @@ license:             BSD3
 license-file:        LICENSE
 author:              Bryan O'Sullivan <bos@serpentine.com>
 maintainer:          Bryan O'Sullivan <bos@serpentine.com>
-copyright:           2011 MailRank, Inc.
+copyright:           (c) 2011 Bryan O'Sullivan
+                     (c) 2011 MailRank, Inc.
 category:            Network
 build-type:          Simple
 cabal-version:       >=1.8
@@ -24,7 +25,7 @@ extra-source-files:
     servers/ping/src/*.hs
 
 data-files:
-  templates/report.tpl
+  templates/*.tpl
 
 flag developer
   description: operate in developer mode

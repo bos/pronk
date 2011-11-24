@@ -28,6 +28,7 @@ import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
 import Paths_pronk (getDataFileName)
 import Prelude hiding (print)
 import Statistics.Resampling.Bootstrap (Estimate(..))
+import Statistics.Sample.KernelDensity (kde)
 import System.IO (Handle)
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Hastache (MuType(..))
@@ -139,9 +140,13 @@ writeReport :: (Data a) => FilePath -> Handle -> Analysis a -> IO ()
 writeReport template h a@Analysis{..} = do
   let context "include" = MuLambdaM $
                           R.includeFile [templateDir, R.templateDir]
+      context "latKdeTimes" = R.vector "x" latKdeTimes
+      context "latKdePDF" = R.vector "x" latKdePDF
+      context "latKde"    = R.vector2 "time" "pdf" latKdeTimes latKdePDF
       context "latValues" = MuList . map mkGenericContext . G.toList $ lats
       context "thrValues" = R.vector "x" thrValues
       context n = mkGenericContext a n
+      (latKdeTimes,latKdePDF) = kde 128 . G.convert . G.map summElapsed $ latValues
       lats = G.map (\s -> s { summStart = summStart s - t }) latValues
           where t = summStart . G.head $ latValues
   tpl <- R.loadTemplate [".",templateDir] template

@@ -23,20 +23,15 @@
  </head>
     <body>
       <div class="body">
-    <h1>criterion performance measurements</h1>
+    <h1>pronk performance measurements</h1>
 
-<h2>overview</h2>
-
-<div id="overview" class="ovchart" style="width:900px;height:100px;"></div>
-
-{{#report}}
-<h2><a name="b{{number}}">{{name}}</a></h2>
+<h2><a name="b{{number}}">name</a></h2>
  <table width="100%">
   <tbody>
    <tr>
-    <td><div id="kde{{number}}" class="kdechart"
+    <td><div id="kde0" class="kdechart"
              style="width:450px;height:278px;"></div></td>
-    <td><div id="time{{number}}" class="timechart"
+    <td><div id="time0" class="timechart"
              style="width:450px;height:278px;"></div></td>
   </tbody>
  </table>
@@ -83,7 +78,7 @@ $(function () {
     ts = ts[0];
     var kq = $("#kde" + number);
     var k = $.plot(kq,
-           [{ label: name + " time densities (" + units + ")",
+           [{ label: name + " latency densities (" + units + ")",
               data: $.zip(kdetimes, kdepdf),
               }],
            { yaxis: { ticks: false },
@@ -98,7 +93,7 @@ $(function () {
     for (var i = 0; i < ts.length; i++)
       timepairs[i] = [ts[i],i];
     $.plot($("#time" + number),
-           [{ label: name + " times (" + units + ")",
+           [{ label: name + " latencies (" + units + ")",
               data: timepairs }],
            { points: { show: true },
              grid: { hoverable: true },
@@ -108,43 +103,11 @@ $(function () {
     $.addTooltip("#kde" + number, function(x,y) { return x + ' ' + units; });
     $.addTooltip("#time" + number, function(x,y) { return x + ' ' + units; });
   };
-  {{#report}}
-  mangulate({{number}}, "{{name}}",
-            {{anMean.estPoint}},
-            [{{#times}}{{x}},{{/times}}],
-            [{{#kdetimes}}{{x}},{{/kdetimes}}],
-            [{{#kdepdf}}{{x}},{{/kdepdf}}]);
-  {{/report}}
-
-  var benches = [{{#report}}"{{name}}",{{/report}}];
-  var ylabels = [{{#report}}[-{{number}},'<a href="#b{{number}}">{{name}}</a>'],{{/report}}];
-  var means = $.scaleTimes([{{#report}}{{anMean.estPoint}},{{/report}}]);
-  var xs = [];
-  var prev = null;
-  for (var i = 0; i < means[0].length; i++) {
-    var name = benches[i].split(/\//);
-    name.pop();
-    name = name.join('/');
-    if (name != prev) {
-      xs.push({ label: name, data: [[means[0][i], -i]]});
-      prev = name;
-    }
-    else
-      xs[xs.length-1].data.push([means[0][i],-i]);
-  }
-  var oq = $("#overview");
-  o = $.plot(oq, xs, { bars: { show: true, horizontal: true,
-                               barWidth: 0.75, align: "center" },
-                       grid: { hoverable: true },
-                       legend: { show: xs.length > 1 },
-                       xaxis: { max: Math.max.apply(undefined,means[0]) * 1.02 },
-                       yaxis: { ticks: ylabels, tickColor: '#ffffff' } });
-  if (benches.length > 3)
-    o.getPlaceholder().height(28*benches.length);
-  o.resize();
-  o.setupGrid();
-  o.draw();
-  $.addTooltip("#overview", function(x,y) { return x + ' ' + means[1]; });
+  mangulate(0, "name",
+            {{latency.mean}},
+            [{{#latValues}}{{summElapsed}},{{/latValues}}],
+            [{{#latKdeTimes}}{{x}},{{/latKdeTimes}}],
+            [{{#latKdePDF}}{{x}},{{/latKdePDF}}]);
 });
 $(document).ready(function () {
     $(".time").text(function(_, text) {
