@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards,
-    ScopedTypeVariables #-}
+    ScopedTypeVariables, ViewPatterns #-}
 
 module Network.HTTP.LoadTest.Types
     (
@@ -17,7 +17,7 @@ module Network.HTTP.LoadTest.Types
     , Basic(..)
     ) where
 
-import Control.Applicative ((<$>), (<*>), empty)
+import Control.Applicative ((<$>), (<*>), pure, empty)
 import Control.Arrow (first)
 import Control.DeepSeq (NFData(rnf))
 import Control.Exception (Exception, IOException, SomeException, try)
@@ -32,6 +32,9 @@ import System.IO.Unsafe
 import qualified Data.ByteString.Char8 as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
+import qualified Data.Vector as V
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Unboxed as U
 
 newtype Req = Req {
       fromReq :: Request IO
@@ -119,6 +122,16 @@ instance Hashable Event where
     hash Timeout = 0
     hash HttpResponse{..} = respCode `xor` respContentLength
 
+instance ToJSON Event where
+    toJSON HttpResponse{..} = toJSON (respCode, respContentLength)
+    toJSON Timeout          = "timeout"
+
+instance FromJSON Event where
+    parseJSON (Array (G.toList -> [Number c,Number l])) =
+        pure $ HttpResponse (truncate c) (truncate l)
+    parseJSON (String "timeout") = pure Timeout
+    parseJSON _ = empty
+
 -- | Exception thrown if issuing a HTTP request fails.
 data NetworkError = NetworkError {
       fromNetworkError :: IOException
@@ -135,12 +148,28 @@ data Summary = Summary {
 summEnd :: Summary -> Double
 summEnd Summary{..} = summStart + summElapsed
 
+instance ToJSON Summary where
+    toJSON Summary{..} = object [
+                           "start" .= summStart
+                         , "elapsed" .= summElapsed
+                         , "event" .= summEvent
+                         ]
+                                  
+instance FromJSON Summary where
+    parseJSON (Object v) = Summary <$>
+                           v .: "start" <*>
+                           v .: "elapsed" <*>
+                           v .: "event"
+    parseJSON _ = empty
+
 data Analysis a = Analysis {
       latency :: !a
     , latency99 :: !Double
     , latency999 :: !Double
+    , latValues :: V.Vector Summary
     , throughput :: !a
     , throughput10 :: !Double
+    , thrValues :: U.Vector Double
     } deriving (Eq, Show, Typeable, Data)
 
 instance (NFData a) => NFData (Analysis a) where
@@ -170,8 +199,10 @@ instance (ToJSON a) => ToJSON (Analysis a) where
                             "latency" .= latency
                           , "latency99" .= latency99
                           , "latency999" .= latency999
+                          , "latValues" .= latValues
                           , "throughput" .= throughput
                           , "throughput10" .= throughput10
+                          , "thrValues" .= thrValues
                           ]
 
 instance (FromJSON a) => FromJSON (Analysis a) where
@@ -179,6 +210,8 @@ instance (FromJSON a) => FromJSON (Analysis a) where
                            v .: "latency" <*>
                            v .: "latency99" <*>
                            v .: "latency999" <*>
+                           v .: "latValues" <*>
                            v .: "throughput" <*>
-                           v .: "throughput10"
+                           v .: "throughput10" <*>
+                           v .: "thrValues"
     parseJSON _ = empty

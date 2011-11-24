@@ -5,7 +5,7 @@ module Network.HTTP.LoadTest.Report
       reportBasic
     , reportEvents
     , reportFull
-    , writeReportBasic
+    , writeReport
     -- * Other reports
     , csvEvents
     -- * Helper functions
@@ -15,6 +15,7 @@ module Network.HTTP.LoadTest.Report
 import Control.Monad (forM_)
 import Criterion.Analysis (SampleAnalysis(..), OutlierEffect(..),
                            OutlierVariance(..))
+import Data.Data (Data)
 import Data.List (sort)
 import Data.Monoid (mappend, mconcat, mempty)
 import Data.Text (Text)
@@ -27,10 +28,11 @@ import Network.HTTP.LoadTest.Types (Analysis(..), Basic(..), Event(..),
 import Paths_pronk (getDataFileName)
 import Prelude hiding (print)
 import Statistics.Resampling.Bootstrap (Estimate(..))
-import System.FilePath ((</>))
 import System.IO (Handle)
+import System.IO.Unsafe (unsafePerformIO)
 import Text.Hastache (MuType(..))
 import Text.Hastache.Context (mkGenericContext)
+import qualified Criterion.Report as R
 import qualified Data.ByteString.Lazy as L
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text.Format as T
@@ -127,13 +129,21 @@ csvEvents sums = "start,elapsed,event\n" `mappend` G.foldr go mempty sums
     classify Timeout          = "timeout"
     classify HttpResponse{..} = build respCode
 
+-- | The path to the template and other files used for generating
+-- reports.
 templateDir :: FilePath
-templateDir = "templates"
+templateDir = unsafePerformIO $ getDataFileName "templates"
+{-# NOINLINE templateDir #-}
 
-writeReportBasic :: Handle -> Analysis Basic -> IO ()
-writeReportBasic h Analysis{..} = do
-  tpl <- getDataFileName templateDir
-  let context n@"latency" = mkGenericContext latency n
-      context _           = MuNothing
-  bs <- H.hastacheFile H.defaultConfig (tpl </> "report.tpl") context
+writeReport :: (Data a) => FilePath -> Handle -> Analysis a -> IO ()
+writeReport template h a@Analysis{..} = do
+  let context "include" = MuLambdaM $
+                          R.includeFile [templateDir, R.templateDir]
+      context "latValues" = MuList . map mkGenericContext . G.toList $ lats
+      context "thrValues" = R.vector "x" thrValues
+      context n = mkGenericContext a n
+      lats = G.map (\s -> s { summStart = summStart s - t }) latValues
+          where t = summStart . G.head $ latValues
+  tpl <- R.loadTemplate [".",templateDir] template
+  bs <- H.hastacheStr H.defaultConfig tpl context
   L.hPutStr h bs

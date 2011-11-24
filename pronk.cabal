@@ -23,6 +23,9 @@ extra-source-files:
     servers/ping/ping-servers.cabal
     servers/ping/src/*.hs
 
+data-files:
+  templates/report.tpl
+
 flag developer
   description: operate in developer mode
   default: False

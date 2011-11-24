@@ -37,8 +37,10 @@ analyseFull sumv = do
                  latency = l
                , latency99 = weightedAvg 99 100 . G.map summElapsed $ sumv
                , latency999 = weightedAvg 999 1000 . G.map summElapsed $ sumv
+               , latValues = sumv
                , throughput = scale (recip timeSlice) t
                , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
+               , thrValues = slices
     }
 
 analyseBasic :: V.Vector Summary -> Analysis Basic
@@ -49,11 +51,13 @@ analyseBasic sumv = Analysis {
                                 }
                     , latency99 = weightedAvg 99 100 . G.map summElapsed $ sumv
                     , latency999 = weightedAvg 999 1000 . G.map summElapsed $ sumv
+                    , latValues = sumv
                     , throughput = Basic {
                                      mean = S.mean slices / timeSlice
                                    , stdDev = S.stdDev slices / timeSlice
                                    }
                     , throughput10 = (/ timeSlice) . weightedAvg 10 100 $ slices
+                    , thrValues = slices
                     }
  where start = summStart . G.head $ sumv
        end = summEnd . G.last $ sumv

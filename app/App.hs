@@ -5,7 +5,7 @@ module Main (main) where
 
 import Control.Applicative ((<$>))
 import Control.DeepSeq (rnf)
-import Control.Exception (catch, evaluate, finally)
+import Control.Exception (bracket, catch, evaluate, finally)
 import Control.Monad (forM_, unless)
 import Data.Aeson ((.=), encode, object)
 import Data.Char (toLower)
@@ -17,14 +17,13 @@ import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
 import Network.HTTP.LoadTest.Analysis (analyseBasic, analyseFull)
 import Network.HTTP.LoadTest.Environment (environment)
-import Network.HTTP.LoadTest.Report (buildTime, csvEvents, reportBasic,
-                                     reportEvents, reportFull)
+import Network.HTTP.LoadTest.Report
 import Network.Socket (withSocketsDo)
 import Prelude hiding (catch)
 import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
 import System.Exit (ExitCode(ExitFailure), exitWith)
-import System.IO (hPutStrLn, stderr, stdout)
+import System.IO (Handle, IOMode(..), hClose, hPutStrLn, openFile, stderr, stdout)
 import qualified Data.Aeson.Generic as G
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -46,6 +45,8 @@ data Args = Args {
 
     , bootstrap :: Bool
     , dump_events :: Maybe FilePath
+    , output :: Maybe FilePath
+    , template :: FilePath
     , json :: Maybe FilePath
     } deriving (Eq, Show, Typeable, Data)
 
@@ -64,17 +65,23 @@ defaultArgs = Args {
                 &= help "Time to wait before killing a connection"
               , url = def &= argPos 0 &= typ "URL"
 
+              -- --------------------------------------------------
               , from_file = def &= typ "FILE"
                 &= groupname "Supplying a request body"
                 &= help "Use file contents as request body"
               , literal = def &= typ "STRING"
                 &= help "Use given text as request body"
 
+              -- --------------------------------------------------
               , bootstrap = def
                 &= groupname "Analysis of results"
                 &= help "Statistically robust analysis of results"
               , dump_events = def &= typ "FILE"
                 &= help "Save raw events in CSV format"
+              , output = def &= typ "FILE"
+                &= help "Write report to named file"
+              , template = "report.tpl" &= typ "FILE"
+                &= help "Use the given report template"
               , json = def &= typ "FILE"
                 &= help "Save analysis in JSON format"
               } &= verbosity
@@ -115,18 +122,20 @@ main = withSocketsDo $ do
       let dump = object [ "config" .= cfg
                         , "environment" .= env
                         , "analysis" .= G.toJSON analysis ]
-      case json of
-        Just "-" -> BL.putStrLn (encode dump)
-        Just f   -> BL.writeFile f (encode dump)
-        _        -> return ()
-      case dump_events of
-        Just "-" -> TL.putStr . toLazyText . csvEvents $ results
-        Just f   -> TL.writeFile f . toLazyText . csvEvents $ results
-        _        -> return ()
+      maybeWriteFile json $ \h -> BL.hPutStrLn h . encode $ dump
+      maybeWriteFile dump_events $ \h ->
+          TL.hPutStr h . toLazyText . csvEvents $ results
+      maybeWriteFile output $ \h -> either (writeReport template h)
+                                           (writeReport template h) analysis
       whenNormal $ do
         reportEvents stdout results
         either (reportBasic stdout) (reportFull whenLoud stdout)
                analysis
+
+maybeWriteFile :: Maybe FilePath -> (Handle -> IO ()) -> IO ()
+maybeWriteFile (Just "-") act = act stdout
+maybeWriteFile (Just p)   act = bracket (openFile p WriteMode) hClose act
+maybeWriteFile _          _   = return ()
 
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do
