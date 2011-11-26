@@ -148,7 +148,7 @@ writeReport template h a@Analysis{..} = do
       context n = mkGenericContext a n
       (latKdeTimes,latKdePDF) = kde 128 . G.convert . G.map summElapsed $ latValues
       lats = G.map (\s -> s { summStart = summStart s - t }) latValues
-          where t = summStart . G.head $ latValues
+          where t = G.minimum . G.map summStart $ latValues
   tpl <- R.loadTemplate [".",templateDir] template
   bs <- H.hastacheStr H.defaultConfig tpl context
   L.hPutStr h bs
