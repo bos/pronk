@@ -29,7 +29,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.Text.Format as T
 import qualified Data.Text.Lazy.IO as TL
-import qualified Network.HTTP.Enumerator as E
+import qualified Network.HTTP.Conduit as E
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
