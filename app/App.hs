@@ -122,7 +122,7 @@ main = withSocketsDo $ do
       let dump = object [ "config" .= cfg
                         , "environment" .= env
                         , "analysis" .= G.toJSON analysis ]
-      maybeWriteFile json $ \h -> BL.hPutStrLn h . encode $ dump
+      maybeWriteFile json $ \h -> BL.hPut h (BL.append (encode dump) "\n")
       maybeWriteFile dump_events $ \h ->
           TL.hPutStr h . toLazyText . csvEvents $ results
       maybeWriteFile output $ \h -> either (writeReport template h)
