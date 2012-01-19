@@ -57,7 +57,7 @@ library
     filepath,
     hashable >= 1.1.2.0,
     hastache,
-    http-conduit >= 1.0,
+    http-conduit >= 1.2,
     http-types,
     lifted-base,
     statistics >= 0.10.0.0,
