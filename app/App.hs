@@ -29,7 +29,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.Text.Format as T
 import qualified Data.Text.Lazy.IO as TL
-import qualified Network.HTTP.Enumerator as E
+import qualified Network.HTTP.Conduit as E
 import qualified Network.HTTP.LoadTest as LoadTest
 
 data Args = Args {
@@ -122,7 +122,7 @@ main = withSocketsDo $ do
       let dump = object [ "config" .= cfg
                         , "environment" .= env
                         , "analysis" .= G.toJSON analysis ]
-      maybeWriteFile json $ \h -> BL.hPutStrLn h . encode $ dump
+      maybeWriteFile json $ \h -> BL.hPut h (BL.append (encode dump) "\n")
       maybeWriteFile dump_events $ \h ->
           TL.hPutStr h . toLazyText . csvEvents $ results
       maybeWriteFile output $ \h -> either (writeReport template h)

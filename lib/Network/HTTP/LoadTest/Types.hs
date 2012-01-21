@@ -26,8 +26,7 @@ import Data.Bits (xor)
 import Data.Data (Data)
 import Data.Hashable (Hashable(hash))
 import Data.Typeable (Typeable)
-import Network.HTTP.Enumerator (Request(..), parseUrl)
-import Network.HTTP.Types (renderQuery)
+import Network.HTTP.Conduit (Request(..), parseUrl)
 import System.IO.Unsafe
 import qualified Data.ByteString.Char8 as B
 import qualified Data.CaseInsensitive as CI
@@ -42,8 +41,10 @@ newtype Req = Req {
 
 instance Show Req where
     show (Req req) = concatMap B.unpack
-                         [ http, host req, portie, path req
-                         , renderQuery True $ queryString req ]
+                         $ http: host req: portie: path req
+                         : if B.null (queryString req)
+                            then []
+                            else ["?", queryString req]
         where http | secure req = "https://"
                    | otherwise  = "http://"
               isDefaultPort | secure req = port req == 443
