@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, CPP, DeriveDataTypeable, OverloadedStrings,
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, OverloadedStrings,
     RecordWildCards, ScopedTypeVariables #-}
 
 module Main (main) where
@@ -14,11 +14,13 @@ import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Lazy.Builder (toLazyText)
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Version (showVersion)
 import Network.HTTP.LoadTest (NetworkError(..), Req(..))
 import Network.HTTP.LoadTest.Analysis (analyseBasic, analyseFull)
 import Network.HTTP.LoadTest.Environment (environment)
 import Network.HTTP.LoadTest.Report
 import Network.Socket (withSocketsDo)
+import Paths_pronk (version)
 import Prelude hiding (catch)
 import System.CPUTime (getCPUTime)
 import System.Console.CmdArgs
@@ -49,6 +51,9 @@ data Args = Args {
     , template :: FilePath
     , json :: Maybe FilePath
     } deriving (Eq, Show, Typeable, Data)
+
+pronk_version :: String
+pronk_version = showVersion version
 
 defaultArgs :: Args
 defaultArgs = Args {
@@ -85,7 +90,7 @@ defaultArgs = Args {
               , json = def &= typ "FILE"
                 &= help "Save analysis in JSON format"
               } &= verbosity
-                &= summary ("Pronk " ++ VERSION_pronk ++
+                &= summary ("Pronk " ++ pronk_version ++
                             " - a modern HTTP load tester")
 
 fromArgs :: Args -> E.Request IO -> LoadTest.Config
