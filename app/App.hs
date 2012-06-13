@@ -7,6 +7,7 @@ import Control.Applicative ((<$>))
 import Control.DeepSeq (rnf)
 import Control.Exception (bracket, catch, evaluate, finally)
 import Control.Monad (forM_, unless)
+import Control.Monad.Trans.Resource (ResourceT)
 import Data.Aeson ((.=), encode, object)
 import Data.Char (toLower)
 import Data.Maybe (catMaybes)
@@ -93,7 +94,7 @@ defaultArgs = Args {
                 &= summary ("Pronk " ++ pronk_version ++
                             " - a modern HTTP load tester")
 
-fromArgs :: Args -> E.Request IO -> LoadTest.Config
+fromArgs :: Args -> E.Request (ResourceT IO) -> LoadTest.Config
 fromArgs Args{..} req =
     LoadTest.Config {
       LoadTest.concurrency = concurrency
@@ -156,7 +157,7 @@ validateArgs Args{..} = do
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
 
-createRequest :: Args -> IO (E.Request IO)
+createRequest :: Args -> IO (E.Request (ResourceT IO))
 createRequest Args{..} = do
   req0 <- E.parseUrl url `catch` \(e::E.HttpException) ->
           fatal $ "could not parse URL - " ++

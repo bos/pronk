@@ -34,9 +34,10 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
+import Control.Monad.Trans.Resource (ResourceT)
 
 newtype Req = Req {
-      fromReq :: Request IO
+      fromReq :: Request (ResourceT IO)
     } deriving (Typeable)
 
 instance Show Req where
