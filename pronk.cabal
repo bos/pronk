@@ -60,6 +60,7 @@ library
     http-conduit >= 1.2,
     http-types,
     lifted-base,
+    resourcet,
     statistics >= 0.10.0.0,
     text,
     text-format >= 0.3.0.4,
@@ -88,8 +89,9 @@ executable pronk
     criterion,
     deepseq,
     http-conduit,
-    pronk,
     network,
+    pronk,
+    resourcet,
     text,
     text-format,
     time

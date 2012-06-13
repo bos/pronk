@@ -78,6 +78,6 @@ client Config{..} mgr interval = loop 0 [] =<< liftIO getPOSIXTime
 respEvent :: Response L.ByteString -> Event
 respEvent resp =
     HttpResponse {
-      respCode = H.statusCode $ statusCode resp
+      respCode = H.statusCode $ responseStatus resp
     , respContentLength = fromIntegral . L.length . responseBody $ resp
     }
