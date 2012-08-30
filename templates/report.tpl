@@ -33,6 +33,17 @@
              style="width:450px;height:278px;"></div></td>
     <td><div id="time0" class="timechart"
              style="width:450px;height:278px;"></div></td>
+   </tr>
+   <tr>
+    <td></td>
+    <td><div id="thru0" class="timechart"
+             style="width:450px;height:278px;"></div></td>
+   </tr>
+   <tr>
+    <td></td>
+    <td><div id="wtf0" class="timechart"
+             style="width:450px;height:278px;"></div></td>
+   </tr>
   </tbody>
  </table>
 
@@ -45,7 +56,8 @@
 
 <script type="text/javascript">
 $(function () {
-  function mangulate(number, name, mean, times, lats, kdetimes, kdepdf) {
+  function mangulate(number, name, mean, times, lats, kdetimes,
+                     kdepdf, thrTimes, thrValues) {
     var meanSecs = mean;
     var units = $.timeUnits(mean);
     var scale = units[0];
@@ -54,37 +66,54 @@ $(function () {
     kdetimes = $.scaleBy(scale, kdetimes);
     lats = $.scaleBy(scale, lats);
     var kq = $("#kde" + number);
-    var xmin = Math.min(kdetimes[0], Math.min.apply(undefined, lats));
-    var xmax = Math.max(kdetimes[kdetimes.length-1], Math.max.apply(undefined, lats));
+    var ymin = Math.min(kdetimes[0], Math.min.apply(undefined, lats));
+    var ymax = Math.max(kdetimes[kdetimes.length-1], Math.max.apply(undefined, lats));
     var k = $.plot(kq,
            [{ label: name + " latency densities",
-              data: $.zip(kdetimes, kdepdf),
+              data: $.zip(kdepdf, kdetimes),
               }],
-           { xaxis: { min: xmin, max: xmax,
+           { yaxis: { min: ymin, max: ymax, labelWidth: 50,
                       tickFormatter: $.unitFormatter(units) },
-             yaxis: { ticks: false },
+             xaxis: { ticks: false },
              grid: { hoverable: true, markings: [ { color: '#6fd3fb',
-                     lineWidth: 1.5, xaxis: { from: mean, to: mean } } ] },
+                     lineWidth: 1.5, yaxis: { from: mean, to: mean } } ] },
            });
-    var o = k.pointOffset({ x: mean, y: 0});
+    var o = k.pointOffset({ y: mean, x: 0 });
     kq.append('<div class="meanlegend" title="' + $.renderTime(meanSecs) +
-              '" style="position:absolute;left:' + (o.left + 4) +
-              'px;bottom:139px;">mean</div>');
+              '" style="position:absolute;top:' + (o.top + 4) +
+              'px;left:139px;">mean</div>');
     $.plot($("#time" + number),
            [{ label: name + " latencies",
-              data: $.zip(lats, times) }],
+              data: $.zip(times, lats) }],
            { points: { show: true, radius: 2 },
              grid: { hoverable: true },
-             xaxis: { min: xmin, max: xmax,
+             yaxis: { min: ymin, max: ymax, labelWidth: 50,
                       tickFormatter: $.unitFormatter(units) },
-             yaxis: { min: 0, max: times[times.length-1],
-                      ticks: false,
-                      transform: function(v) { return -v; },
-                      inverseTransform: function(v) { return -v; } },
+             xaxis: { min: 0, max: thrTimes[thrTimes.length-1],
+                      ticks: false },
            });
-    $.addTooltip("#kde" + number, function(x,y) { return x + ' ' + units; });
+    $.plot($("#thru" + number),
+           [{ label: name + " rps",
+              data: $.zip(thrTimes,$.scaleBy(1/(thrTimes[1]-thrTimes[0]), thrValues)) }],
+           { bars: { show: true, barWidth: thrTimes[1]-thrTimes[0] },
+             grid: { hoverable: true },
+             yaxis: { labelWidth: 50, tickFormatter: $.unitFormatter("reqs") },
+             xaxis: { ticks: false },
+           });
+    var x = $.scaleBy(1/(thrTimes[1]-thrTimes[0]), thrValues);
+    var y = $.scaleBy(1, lats);
+    x.sort(function(a,b){return a-b;});
+    y.sort(function(a,b){return a-b;});
+    $.plot($("#wtf" + number),
+           [{ label: name + " rps",
+              data: $.zip(x,y) }],
+           { lines: { show: true }});
+    $.addTooltip("#kde" + number, function(x,y) { return y + ' ' + units; });
     $.addTooltip("#time" + number, function(x,y) {
-      return 'Latency at ' + $.renderTime(y) + ': ' + x + ' ' + units;
+      return 'Latency at ' + $.renderTime(x) + ': ' + y + ' ' + units;
+    });
+    $.addTooltip("#thru" + number, function(x,y) {
+      return 'Req/sec at ' + $.renderTime(x) + ': ' + parseInt(y);
     });
   };
   mangulate(0, "name",
@@ -92,7 +121,9 @@ $(function () {
             /* start */ [{{#latValues}}{{summStart}},{{/latValues}}],
             /* elapsed */ [{{#latValues}}{{summElapsed}},{{/latValues}}],
             /* kde times */ [{{#latKdeTimes}}{{x}},{{/latKdeTimes}}],
-            /* kde pdf */ [{{#latKdePDF}}{{x}},{{/latKdePDF}}]);
+            /* kde pdf */ [{{#latKdePDF}}{{x}},{{/latKdePDF}}],
+            /* thr times */ [{{#thrTimes}}{{x}},{{/thrTimes}}],
+            /* thr values */ [{{#thrValues}}{{x}},{{/thrValues}}]);
 });
 $(document).ready(function () {
     $(".time").text(function(_, text) {

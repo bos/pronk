@@ -49,24 +49,27 @@ run cfg@Config{..} = do
 
 client :: Config -> Manager -> POSIXTime
        -> ResourceT IO (V.Vector Summary)
-client Config{..} mgr interval = loop 0 [] =<< liftIO getPOSIXTime
+client Config{..} mgr interval = loop 0 []
   where
-    loop !n acc now
+    loop !n acc
         | n == numRequests = return (V.fromList acc)
         | otherwise = do
+      now <- liftIO getPOSIXTime
       !evt <- timedRequest
       now' <- liftIO getPOSIXTime
       let elapsed = now' - now
           !s = Summary {
                  summEvent = evt
                , summElapsed = realToFrac elapsed
-               , summStart = realToFrac now'
+               , summStart = realToFrac now
                }
       when (elapsed < interval) $
         liftIO . threadDelay . truncate $ (interval - elapsed) * 1000000
-      loop (n+1) (s:acc) =<< liftIO getPOSIXTime
+      loop (n+1) (s:acc)
+    issueRequest :: ResourceT IO (Response L.ByteString)
     issueRequest = httpLbs (fromReq request) mgr
                    `catch` (throwIO . NetworkError)
+    timedRequest :: ResourceT IO Event
     timedRequest
       | timeout == 0 = respEvent <$> issueRequest
       | otherwise    = do
@@ -78,6 +81,6 @@ client Config{..} mgr interval = loop 0 [] =<< liftIO getPOSIXTime
 respEvent :: Response L.ByteString -> Event
 respEvent resp =
     HttpResponse {
-      respCode = H.statusCode $ statusCode resp
+      respCode = H.statusCode $ responseStatus resp
     , respContentLength = fromIntegral . L.length . responseBody $ resp
     }

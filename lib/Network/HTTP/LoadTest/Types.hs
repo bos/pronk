@@ -23,6 +23,7 @@ import Control.DeepSeq (NFData(rnf))
 import Control.Exception (Exception, IOException, SomeException, try)
 import Data.Aeson.Types (Value(..), FromJSON(..), ToJSON(..), (.:), (.=), object)
 import Data.Bits (xor)
+import Data.Conduit (ResourceT)
 import Data.Data (Data)
 import Data.Hashable (Hashable(hash))
 import Data.Typeable (Typeable)
@@ -33,10 +34,9 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Generic as G
-import qualified Data.Vector.Unboxed as U
 
 newtype Req = Req {
-      fromReq :: Request IO
+      fromReq :: Request (ResourceT IO)
     } deriving (Typeable)
 
 instance Show Req where
@@ -168,9 +168,7 @@ data Analysis a = Analysis {
     , latency99 :: !Double
     , latency999 :: !Double
     , latValues :: V.Vector Summary
-    , throughput :: !a
-    , throughput10 :: !Double
-    , thrValues :: U.Vector Double
+    , throughput :: !Double
     } deriving (Eq, Show, Typeable, Data)
 
 instance (NFData a) => NFData (Analysis a) where
@@ -202,8 +200,6 @@ instance (ToJSON a) => ToJSON (Analysis a) where
                           , "latency999" .= latency999
                           , "latValues" .= latValues
                           , "throughput" .= throughput
-                          , "throughput10" .= throughput10
-                          , "thrValues" .= thrValues
                           ]
 
 instance (FromJSON a) => FromJSON (Analysis a) where
@@ -212,7 +208,5 @@ instance (FromJSON a) => FromJSON (Analysis a) where
                            v .: "latency99" <*>
                            v .: "latency999" <*>
                            v .: "latValues" <*>
-                           v .: "throughput" <*>
-                           v .: "throughput10" <*>
-                           v .: "thrValues"
+                           v .: "throughput"
     parseJSON _ = empty

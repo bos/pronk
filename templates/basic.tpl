@@ -1,9 +1,5 @@
-lat: {{latency.mean}}
-values:
+evts = [
 {{#latValues}}
-  {{summStart}}
+    Event {{summStart}} {{summElapsed}},
 {{/latValues}}
-thr:
-{{#thrValues}}
-  {{x}}
-{{/thrValues}}
+  ]

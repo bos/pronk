@@ -4,11 +4,13 @@
 module Main (main) where
 
 import Control.Applicative ((<$>))
+import Control.Concurrent.MVar
 import Control.DeepSeq (rnf)
 import Control.Exception (bracket, catch, evaluate, finally)
 import Control.Monad (forM_, unless)
 import Data.Aeson ((.=), encode, object)
 import Data.Char (toLower)
+import Data.Conduit (ResourceT)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
@@ -93,7 +95,7 @@ defaultArgs = Args {
                 &= summary ("Pronk " ++ pronk_version ++
                             " - a modern HTTP load tester")
 
-fromArgs :: Args -> E.Request IO -> LoadTest.Config
+fromArgs :: Args -> E.Request (ResourceT IO) -> LoadTest.Config
 fromArgs Args{..} req =
     LoadTest.Config {
       LoadTest.concurrency = concurrency
@@ -108,7 +110,7 @@ main = withSocketsDo $ do
   as@Args{..} <- cmdArgs $ defaultArgs &= program "pronk"
   validateArgs as
   cfg <- fromArgs as <$> createRequest as
-  run <- timed "tested" $ LoadTest.run cfg
+  (run,time) <- timed "tested" $ LoadTest.run cfg
   case run of
     Left [NetworkError err] -> fatal (show err)
     Left errs -> do
@@ -117,12 +119,12 @@ main = withSocketsDo $ do
       exitWith (ExitFailure 1)
     Right results -> do
       whenNormal $ T.print "analysing results\n" ()
-      analysis <- timed "analysed" $ do
-                    r <- if bootstrap
-                         then Right <$> analyseFull results
-                         else return . Left . analyseBasic $ results
-                    evaluate $ rnf r
-                    return r
+      (analysis,_) <- timed "analysed" $ do
+                      r <- if bootstrap
+                           then Right <$> analyseFull results time
+                           else return . Left $ analyseBasic results time
+                      evaluate $ rnf r
+                      return r
       env <- environment
       let dump = object [ "config" .= cfg
                         , "environment" .= env
@@ -130,8 +132,8 @@ main = withSocketsDo $ do
       maybeWriteFile json $ \h -> BL.hPut h (BL.append (encode dump) "\n")
       maybeWriteFile dump_events $ \h ->
           TL.hPutStr h . toLazyText . csvEvents $ results
-      maybeWriteFile output $ \h -> either (writeReport template h)
-                                           (writeReport template h) analysis
+      maybeWriteFile output $ \h -> either (writeReport template h time)
+                                           (writeReport template h time) analysis
       whenNormal $ do
         reportEvents stdout results
         either (reportBasic stdout) (reportFull whenLoud stdout)
@@ -156,7 +158,7 @@ validateArgs Args{..} = do
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
 
-createRequest :: Args -> IO (E.Request IO)
+createRequest :: Args -> IO (E.Request (ResourceT IO))
 createRequest Args{..} = do
   req0 <- E.parseUrl url `catch` \(e::E.HttpException) ->
           fatal $ "could not parse URL - " ++
@@ -183,11 +185,12 @@ createRequest Args{..} = do
       hPutStrLn stderr "Error: --literal and --from-file are mutually exclusive"
       exitWith (ExitFailure 1)
 
-timed :: Text -> IO a -> IO a
+timed :: Text -> IO a -> IO (a,Double)
 timed desc act = do
+  t <- newEmptyMVar
   startCPU <- getCPUTime
   startWall <- getPOSIXTime
-  act `finally` do
+  ret <- act `finally` do
     endCPU <- getCPUTime
     endWall <- getPOSIXTime
     let elapsedCPU  = fromIntegral (endCPU - startCPU) / 1e12
@@ -202,6 +205,8 @@ timed desc act = do
                 T.fixed 1 $ 100 * elapsedCPU / elapsedWall)
       else T.print "{} in {}\n"
                (desc, buildTime 4 elapsedWall)
+    putMVar t elapsedWall
+  ((,) ret) <$> takeMVar t
 
 fatal :: String -> IO a
 fatal e = do
