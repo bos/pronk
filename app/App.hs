@@ -169,18 +169,19 @@ createRequest Args{..} = do
       check (Just "POST") = return "POST"
       check (Just "PUT")  = return "PUT"
       check _      = fatal "only POST or PUT may have a body"
+      req = req0 { E.redirectCount = 0, E.checkStatus = \_ _ -> Nothing }
   case (from_file, literal) of
-    (Nothing,Nothing) -> return req0 { E.method = maybe "GET" B.pack method }
+    (Nothing,Nothing) -> return req { E.method = maybe "GET" B.pack method }
     (Just f,Nothing) -> do
       s <- B.readFile f
       meth <- check method
-      return req0 { E.method = meth
-                  , E.requestBody = E.RequestBodyBS s }
+      return req { E.method = meth
+                 , E.requestBody = E.RequestBodyBS s }
     (Nothing,Just s) -> do
       meth <- check method
-      return req0 { E.method = meth
-                  , E.requestBody = E.RequestBodyBS . encodeUtf8 . pack $ s
-                  }
+      return req { E.method = meth
+                 , E.requestBody = E.RequestBodyBS . encodeUtf8 . pack $ s
+                 }
     _ -> do
       hPutStrLn stderr "Error: --literal and --from-file are mutually exclusive"
       exitWith (ExitFailure 1)
