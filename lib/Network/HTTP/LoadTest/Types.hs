@@ -34,6 +34,7 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Generic as G
+import Control.Monad.Trans.Resource (ResourceT)
 
 newtype Req = Req {
       fromReq :: Request (ResourceT IO)
