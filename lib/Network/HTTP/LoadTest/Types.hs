@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards,
-    ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, OverloadedStrings,
+    RecordWildCards, ScopedTypeVariables, ViewPatterns #-}
 
 module Network.HTTP.LoadTest.Types
     (
@@ -22,19 +22,18 @@ import Control.Arrow (first)
 import Control.DeepSeq (NFData(rnf))
 import Control.Exception (Exception, IOException, SomeException, try)
 import Data.Aeson.Types (Value(..), FromJSON(..), ToJSON(..), (.:), (.=), object)
-import Data.Bits (xor)
 import Data.Conduit (ResourceT)
 import Data.Data (Data)
-import Data.Hashable (Hashable(hash))
+import Data.Hashable (Hashable)
 import Data.Typeable (Typeable)
 import Network.HTTP.Conduit (Request(..), parseUrl)
+import GHC.Generics (Generic)
 import System.IO.Unsafe
 import qualified Data.ByteString.Char8 as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Generic as G
-import Control.Monad.Trans.Resource (ResourceT)
 
 newtype Req = Req {
       fromReq :: Request (ResourceT IO)
@@ -118,11 +117,9 @@ data Event =
       respCode :: {-# UNPACK #-} !Int
     , respContentLength :: {-# UNPACK #-} !Int
     } | Timeout
-    deriving (Eq, Ord, Read, Show, Typeable, Data)
+    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
 
-instance Hashable Event where
-    hash Timeout = 0
-    hash HttpResponse{..} = respCode `xor` respContentLength
+instance Hashable Event
 
 instance ToJSON Event where
     toJSON HttpResponse{..} = toJSON (respCode, respContentLength)
@@ -156,7 +153,7 @@ instance ToJSON Summary where
                          , "elapsed" .= summElapsed
                          , "event" .= summEvent
                          ]
-                                  
+
 instance FromJSON Summary where
     parseJSON (Object v) = Summary <$>
                            v .: "start" <*>

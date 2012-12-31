@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fsimpl-tick-factor=150 #-}
 {-# LANGUAGE BangPatterns, RecordWildCards #-}
 
 module Network.HTTP.LoadTest.Analysis
