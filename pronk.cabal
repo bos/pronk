@@ -55,6 +55,7 @@ library
     criterion >= 0.6.0.0,
     deepseq,
     filepath,
+    ghc-prim >= 0.2.0.0,
     hashable >= 1.2.0.2,
     hastache,
     http-conduit >= 1.6,
