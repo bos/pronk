@@ -67,8 +67,11 @@ client Config{..} mgr interval = loop 0 []
         liftIO . threadDelay . truncate $ (interval - elapsed) * 1000000
       loop (n+1) (s:acc)
     issueRequest :: ResourceT IO (Response L.ByteString)
-    issueRequest = httpLbs (fromReq request) mgr
+    issueRequest = httpLbs (clear $ fromReq request) mgr
                    `catch` (throwIO . NetworkError)
+      where clear r = r { checkStatus = \_ _ -> Nothing
+                        , responseTimeout = Nothing
+                        }
     timedRequest :: ResourceT IO Event
     timedRequest
       | timeout == 0 = respEvent <$> issueRequest

@@ -58,7 +58,7 @@ library
     ghc-prim >= 0.2.0.0,
     hashable >= 1.2.0.2,
     hastache,
-    http-conduit >= 1.6,
+    http-conduit >= 1.7,
     http-types,
     lifted-base,
     meldable-heap,
