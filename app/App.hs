@@ -146,17 +146,15 @@ maybeWriteFile _          _   = return ()
 
 validateArgs :: Args -> IO ()
 validateArgs Args{..} = do
-  let p !? what | p         = Nothing
-                | otherwise = Just $ "Argument to " ++ what
-      infix 1 !?
-      problems = catMaybes [
-         concurrency > 0 !? "--concurrency must be positive"
-       , num_requests > 0 !? "--num-requests must be positive"
-       , requests_per_second >= 0 !? "--requests-per-second cannot be negative"
-       , timeout >= 0 !? "--timeout cannot be negative"
-       ]
   forM_ problems $ hPutStrLn stderr . ("Error: " ++)
   unless (null problems) $ exitWith (ExitFailure 1)
+  where
+    problems = concat
+        [ [ "--concurrency must be positive" | concurrency <= 0 ]
+        , [ "--num-requests must be positive" | num_requests <= 0 ]
+        , [ "--requests-per-second cannot be negative" | requests_per_second < 0 ]
+        , [ "--timeout cannot be negative" | timeout < 0 ]
+        ]
 
 createRequest :: Args -> IO (E.Request (ResourceT IO))
 createRequest Args{..} = do
