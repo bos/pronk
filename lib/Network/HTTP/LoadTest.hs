@@ -69,7 +69,7 @@ client Config{..} mgr interval = loop 0 []
     issueRequest :: ResourceT IO (Response L.ByteString)
     issueRequest = httpLbs (clear $ fromReq request) mgr
                    `catch` (throwIO . NetworkError)
-      where clear r = r { checkStatus = \_ _ -> Nothing
+      where clear r = r { checkStatus = \_ _ _ -> Nothing
                         , responseTimeout = Nothing
                         }
     timedRequest :: ResourceT IO Event
