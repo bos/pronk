@@ -131,17 +131,19 @@ templateDir = unsafePerformIO $ getDataFileName "templates"
 
 writeReport :: (Data a) => FilePath -> Handle -> Double -> Analysis a -> IO ()
 writeReport template h elapsed a@Analysis{..} = do
-  let context "include" = MuLambdaM $
+  let context "include" = return . MuLambdaM $
                           R.includeFile [templateDir, R.templateDir]
-      context "elapsed"   = MuVariable elapsed
-      context "latKdeTimes" = R.vector "x" latKdeTimes
-      context "latKdePDF" = R.vector "x" latKdePDF
-      context "latKde"    = R.vector2 "time" "pdf" latKdeTimes latKdePDF
-      context "latValues" = MuList . map mkGenericContext . G.toList $ lats
-      context "thrTimes" = R.vector "x" thrTimes
-      context "thrValues" = R.vector "x" thrValues
-      context "concTimes" = R.vector "x" . U.fromList $ map fstS conc
-      context "concValues" = R.vector "x" . U.fromList $ map sndS conc
+      context "elapsed"   = return $ MuVariable elapsed
+      context "latKdeTimes" = return $ R.vector "x" latKdeTimes
+      context "latKdePDF" = return $ R.vector "x" latKdePDF
+      context "latKde"    = return $
+                            R.vector2 "time" "pdf" latKdeTimes latKdePDF
+      context "latValues" = return . MuList
+                            . map mkGenericContext . G.toList $ lats
+      context "thrTimes" = return $ R.vector "x" thrTimes
+      context "thrValues" = return $ R.vector "x" thrValues
+      context "concTimes" = return . R.vector "x" . U.fromList $ map fstS conc
+      context "concValues" = return . R.vector "x" . U.fromList $ map sndS conc
       context n = mkGenericContext a n
       (latKdeTimes,latKdePDF) = kde 128 . G.convert . G.map summElapsed $ latValues
       lats = G.map (\s -> s { summStart = summStart s - t }) latValues
