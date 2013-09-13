@@ -169,7 +169,7 @@ createRequest Args{..} = do
       check (Just "POST") = return "POST"
       check (Just "PUT")  = return "PUT"
       check _      = fatal "only POST or PUT may have a body"
-      req = req0 { E.redirectCount = 0, E.checkStatus = \_ _ -> Nothing }
+      req = req0 { E.redirectCount = 0, E.checkStatus = \_ _ _ -> Nothing }
   case (from_file, literal) of
     (Nothing,Nothing) -> return req { E.method = maybe "GET" B.pack method }
     (Just f,Nothing) -> do
